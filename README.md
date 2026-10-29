@@ -8,7 +8,7 @@ Requires Node 24 (see `.nvmrc`).
 
 ```sh
 nvm use          # or install Node 24 another way
-npm install
+npm ci
 cp .env.example .env.local   # then fill in TMDB_TOKEN
 npm run dev
 ```
