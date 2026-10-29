@@ -1,5 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
-import type { Kind, Title, TitleKey, WatchEvent } from "./types";
+import type { Kind, ListStatus, Title, TitleKey, WatchEvent } from "./types";
 
 // Local-only IndexedDB storage for the library.
 
@@ -102,6 +102,35 @@ export class LibraryRepository {
 
   listWatchEvents(key: TitleKey): Promise<WatchEvent[]> {
     return this.db.getAllFromIndex("watchEvents", "byTitle", keyOf(key));
+  }
+
+  getWatchEvent(uid: string): Promise<WatchEvent | undefined> {
+    return this.db.get("watchEvents", uid);
+  }
+
+  /**
+   * Writes one watch-log change in a single transaction: puts `add`, deletes the `remove` uids
+   * and sets the title's status. Throws `TitleNotFoundError` (writing nothing) if the title is gone.
+   */
+  async commitWatchLog(
+    key: TitleKey,
+    change: { add: WatchEvent[]; remove: string[]; status: ListStatus },
+  ): Promise<Title> {
+    const tx = this.db.transaction(["titles", "watchEvents"], "readwrite");
+    const titles = tx.objectStore("titles");
+    const existing = await titles.get(keyOf(key));
+    if (!existing) {
+      tx.abort();
+      await tx.done.catch(() => {});
+      throw new TitleNotFoundError(key);
+    }
+    const events = tx.objectStore("watchEvents");
+    for (const uid of change.remove) await events.delete(uid);
+    for (const event of change.add) await events.put(event);
+    const updated = { ...existing, status: change.status };
+    await titles.put(updated);
+    await tx.done;
+    return updated;
   }
 }
 
