@@ -1,0 +1,24 @@
+# dependencies
+node_modules/
+
+# next.js / build output
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# testing
+coverage/
+
+# env files (only the example is committed)
+.env*
+!.env.example
+
+# local databases
+*.db
+*.sqlite
+
+# tooling
+.claude/
+openspec/
+.vercel/
