@@ -139,3 +139,11 @@ export async function requestPersistentStorage(): Promise<boolean> {
   if (typeof navigator === "undefined" || !navigator.storage?.persist) return false;
   return navigator.storage.persist();
 }
+
+let shared: Promise<LibraryRepository> | undefined;
+
+/** The app's library, opened on first use. Browser only. */
+export function libraryRepository(): Promise<LibraryRepository> {
+  shared ??= openLibraryDB().then((db) => new LibraryRepository(db));
+  return shared;
+}
