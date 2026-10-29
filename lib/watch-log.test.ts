@@ -5,7 +5,7 @@ import { isWatched, rewatchCount, rewatchProgress, titleProgress, type Episode }
 import { LibraryRepository, openLibraryDB } from "./storage";
 import type { ShowStatus, ListStatus, Title, TitleKey } from "./types";
 import { UndoStack } from "./undo-stack";
-import { WatchLogService } from "./watch-log";
+import { allowedStatuses, InvalidStatusError, WatchLogService } from "./watch-log";
 
 // Ports RyuujiTests/Services/WatchLogServiceTests.swift (specs/watch-log), against fake-indexeddb.
 
@@ -345,6 +345,49 @@ describe("setting Completed (LIB-299)", () => {
     expect(await status(show)).toBe("dropped");
     await service.log(show, episodes[1]);
     expect(await status(show)).toBe("watching");
+  });
+});
+
+describe("Library status menu (LIB-414)", () => {
+  it("registers exactly one undo step for Completed and undo restores status and removes the batch", async () => {
+    const undo = new UndoStack();
+    const episodes = F.season(1, 4);
+    const show = await makeShow(episodes, "watching", "Ended");
+    await service.log(show, episodes[0]);
+    const before = await events(show);
+
+    await service.setStatus(show, "completed", undo);
+    const added = (await events(show)).filter((e) => e.batchId !== null);
+    expect(added).toHaveLength(3);
+    expect(new Set(added.map((e) => e.batchId)).size).toBe(1);
+    expect(await status(show)).toBe("completed");
+    expect(undo.undoActionName).toBe("Mark Completed");
+
+    await undo.undo();
+
+    expect(undo.canUndo).toBe(false);
+    expect(await events(show)).toEqual(before);
+    expect(await status(show)).toBe("watching");
+  });
+
+  it("offers statuses by kind, never Rewatching", () => {
+    expect(allowedStatuses("show")).toEqual(["planToWatch", "watching", "caughtUp", "onHold", "dropped", "completed"]);
+    expect(allowedStatuses("movie")).toEqual(["planToWatch", "watching", "onHold", "dropped", "completed"]);
+  });
+
+  it("rejects a status not allowed for the kind with a typed error and no undo step", async () => {
+    const undo = new UndoStack();
+    const movie = await makeMovie();
+    const show = await makeShow(F.season(1, 2), "watching");
+
+    const error = await service.setStatus(movie, "caughtUp", undo).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(InvalidStatusError);
+    expect(error).toMatchObject({ kind: "movie", status: "caughtUp" });
+    await expect(service.setStatus(show, "rewatching", undo)).rejects.toBeInstanceOf(InvalidStatusError);
+
+    expect(await status(movie)).toBe("planToWatch");
+    expect(await status(show)).toBe("watching");
+    expect(undo.canUndo).toBe(false);
   });
 });
 
