@@ -1,0 +1,461 @@
+{
+    "page": 1,
+    "results": [
+        {
+            "adult": false,
+            "backdrop_path": "/7Sz41DFZZpnkbLVJFKSF1cbCMyz.jpg",
+            "genre_ids": [
+                16,
+                10759,
+                10765,
+                10762
+            ],
+            "id": 286791,
+            "origin_country": [
+                "JP"
+            ],
+            "original_language": "ja",
+            "original_name": "DIGIMON BEATBREAK",
+            "overview": "Tomoro Tenma lives in a world where human thoughts and emotions, known as e-Pulse, power AI devices called Sapotama. But when Digimon begin materializing from Sapotama and feeding on e-Pulse, society begins to fracture. After Gekkomon appears from his device, Tomoro joins Glowing Dawn, a secret team investigating rogue Digimon and the dark truth of a system both fueled and corrupted by emotion.",
+            "popularity": 41.1358,
+            "poster_path": "/qcy74ZdijvhaIyiPKFVZJZZrpJt.jpg",
+            "first_air_date": "2025-10-05",
+            "softcore": false,
+            "name": "Digimon Beatbreak",
+            "vote_average": 7.5,
+            "vote_count": 21
+        },
+        {
+            "adult": false,
+            "backdrop_path": "/b6ZtSMxji30liJBCDViqqcK3gPD.jpg",
+            "genre_ids": [
+                16,
+                18
+            ],
+            "id": 262259,
+            "origin_country": [
+                "JP"
+            ],
+            "original_language": "ja",
+            "original_name": "\u30ef\u30f3\u30c0\u30f3\u30b9",
+            "overview": "Kabo is a high school student with a stutter who struggles to express his feelings. He finds himself drawn to his classmate Wanda, who pursues dance without worrying about how others see her. Seeking a form of freestyle expression, Kabo takes on the unfamiliar world of dance.",
+            "popularity": 28.2466,
+            "poster_path": "/tb09vxLJ5yf7pMbmWqRvWE6bL5y.jpg",
+            "first_air_date": "2025-10-08",
+            "softcore": false,
+            "name": "Wandance",
+            "vote_average": 7.4,
+            "vote_count": 11
+        },
+        {
+            "adult": false,
+            "backdrop_path": "/gKWlliimO4U0ov7MylSZWSs9kA5.jpg",
+            "genre_ids": [
+                16
+            ],
+            "id": 288577,
+            "origin_country": [
+                "JP"
+            ],
+            "original_language": "ja",
+            "original_name": "\u30ae\u30eb\u30c6\u30a3\u30db\u30fc\u30eb",
+            "overview": "This overworked and underpaid teacher, Mr. Sasaki, has his whole life turned upside down when he stumbles upon the \"Guilty Hole.\" He thinks it's a dream when he sees the student's shoe lockers have been transformed into selection panels... seeing one that catches his eye, he joking picks her... When she appears in his classroom in the middle of the night, throwing insults at him, but her eyes seem to linger on him, tinged with embarassment. \"I'll finish this quickly so... Don't hold back, ok...?\" Thus begins a forbidden relationship... Welcome to the Guilty Hole, where anything is allowed--",
+            "popularity": 27.0272,
+            "poster_path": "/yhFzqy6Kjo9O7ijzwIHcZcu0YX1.jpg",
+            "first_air_date": "2025-10-06",
+            "softcore": false,
+            "name": "Room of Guilty Pleasure",
+            "vote_average": 6.4,
+            "vote_count": 7
+        },
+        {
+            "adult": false,
+            "backdrop_path": "/toXYTAj4hcTS94UJKJEdwZyiGZi.jpg",
+            "genre_ids": [
+                16,
+                18,
+                35,
+                10765
+            ],
+            "id": 299778,
+            "origin_country": [
+                "JP"
+            ],
+            "original_language": "ja",
+            "original_name": "\u85e4\u672c\u30bf\u30c4\u30ad 17-26",
+            "overview": "Six studios and seven directors adapt the early works of Tatsuki Fujimoto, the mastermind behind \"Chainsaw Man,\" into an anime anthology. Each episode is an anime adaptation of a short story he drew from ages seventeen to twenty-six, including the first manga he ever submitted for competition. Watch as vivid tales of young love, chaos, madness, and the bonds between people unfold in each episode.",
+            "popularity": 20.0278,
+            "poster_path": "/rVBxMx1IrBdxbxbBuOWK8kiurMB.jpg",
+            "first_air_date": "2025-11-08",
+            "softcore": false,
+            "name": "Tatsuki Fujimoto 17-26",
+            "vote_average": 8.7,
+            "vote_count": 114
+        },
+        {
+            "adult": false,
+            "backdrop_path": "/yr4tIZq3dkwpYZcTW1qjY4P2kv8.jpg",
+            "genre_ids": [
+                16,
+                35,
+                10762
+            ],
+            "id": 308934,
+            "origin_country": [
+                "JP"
+            ],
+            "original_language": "ja",
+            "original_name": "mofusand animation",
+            "overview": "Shark Meow is an orange tabby kitty who wears a shark suit. A little clumsy and always taking things at their own cozy pace, but every day with their best kitty friends\u2014and the rescued baby kitty, Little Meow\u2014is filled with unexpected little mishaps and sweet adventures.  A sunny warm spot in the park, the sparkle of the sea, steam rising from freshly roasted sweet potatoes, the fluttery feeling of the first snowfall\u2026 These small everyday moments fill their world with warmth and delight.  You can\u2019t help but smile and think, \u201cSo true!\u201d A soft and snuggly kitty anime that brings joy to everyday moments.",
+            "popularity": 21.2704,
+            "poster_path": "/fhPSt1SEVqrtoD4vk5bM8YAyNNd.jpg",
+            "first_air_date": "2025-12-22",
+            "softcore": false,
+            "name": "mofusand the animation",
+            "vote_average": 7.0,
+            "vote_count": 1
+        },
+        {
+            "adult": false,
+            "backdrop_path": "/4BE1aoCu5mCG3ZJ7alNDQkB3oK4.jpg",
+            "genre_ids": [
+                16,
+                35
+            ],
+            "id": 261343,
+            "origin_country": [
+                "JP"
+            ],
+            "original_language": "ja",
+            "original_name": "\u5343\u6b73\u304f\u3093\u306f\u30e9\u30e0\u30cd\u74f6\u306e\u306a\u304b",
+            "overview": "Saku Chitose is a student at Fujishi High School, the most prestigious school in Fukui Prefecture. Outstanding in class, on the field, and in his social life, Saku attracts attention, good and bad. Naturally, he is surrounded by a circle of friends anyone would be happy to have. Now in the spring of his second year, with a new class, Saku is asked to help a shut-in classmate return to school life.",
+            "popularity": 17.7355,
+            "poster_path": "/7tpcFkOpLcWkJU6mV5ooJyHA3DR.jpg",
+            "first_air_date": "2025-10-07",
+            "softcore": false,
+            "name": "Chitose Is in the Ramune Bottle",
+            "vote_average": 7.5,
+            "vote_count": 16
+        },
+        {
+            "adult": false,
+            "backdrop_path": "/5EzzCBJXWU7lpi8rPrhHDC4KkWj.jpg",
+            "genre_ids": [
+                16,
+                35,
+                18
+            ],
+            "id": 283818,
+            "origin_country": [
+                "JP"
+            ],
+            "original_language": "ja",
+            "original_name": "\u592a\u967d\u3088\u308a\u3082\u7729\u3057\u3044\u661f",
+            "overview": "Sae Iwata, a slightly tougher-than-average girl, falls for the gentle smile of Koki Kamishiro, a delicate boy, back in elementary school. By the time they enter junior high school, Koki has grown into a charming and popular teen who now feels out of reach. When they are assigned to the sports festival committee together, Sae\u2019s long-hidden first love begins to stir once more.",
+            "popularity": 15.4888,
+            "poster_path": "/tMCyjS1Qif5VhmRakSJpF0TzdQj.jpg",
+            "first_air_date": "2025-10-02",
+            "softcore": false,
+            "name": "A Star Brighter than the Sun",
+            "vote_average": 7.5,
+            "vote_count": 20
+        },
+        {
+            "adult": false,
+            "backdrop_path": "/gNYmU3RUlCb6dVqkiPCT7vglMfg.jpg",
+            "genre_ids": [
+                16,
+                10759,
+                10765,
+                18
+            ],
+            "id": 280042,
+            "origin_country": [
+                "JP"
+            ],
+            "original_language": "ja",
+            "original_name": "\u91ce\u751f\u306e\u30e9\u30b9\u30dc\u30b9\u304c\u73fe\u308c\u305f\uff01",
+            "overview": "An MMO gamer awakens as the Black-Winged Tyrant, Lufas Maphaahl, rising from her sealed fate\u2014only to find this is very real. Her defeat 200 years ago unleashed monsters of death, and the legend is one of terror. Now, trapped in the body of history's most feared conqueror, he must survive a world that wants her dead\u2026and uncover why he's here.",
+            "popularity": 17.8127,
+            "poster_path": "/xh9lu8gDgzwMBiByTRtTsclluZf.jpg",
+            "first_air_date": "2025-10-04",
+            "softcore": false,
+            "name": "A Wild Last Boss Appeared!",
+            "vote_average": 7.1,
+            "vote_count": 27
+        },
+        {
+            "adult": false,
+            "backdrop_path": "/hPYlTczDtllJfU0SY3sA96s7Uy6.jpg",
+            "genre_ids": [
+                16,
+                10759,
+                35
+            ],
+            "id": 285788,
+            "origin_country": [
+                "JP"
+            ],
+            "original_language": "ja",
+            "original_name": "\u6771\u5cf6\u4e39\u4e09\u90ce\u306f\u4eee\u9762\u30e9\u30a4\u30c0\u30fc\u306b\u306a\u308a\u305f\u3044",
+            "overview": "Even after turning 40 years old, Tojima Tanzaburo still seriously wants to be a Kamen Rider. Just when it seems like his dream may never come true, he gets caught up in a series of infamous Shocker-inspired robberies... Shibata Yokusaru, the author of Air Master and 81 Diver, presents a story about adults who love Kamen Rider a little too much, and start playing pretend... for real!",
+            "popularity": 14.03,
+            "poster_path": "/oDHsngq989H1jY2ZsLB5KRUVIb.jpg",
+            "first_air_date": "2025-10-05",
+            "softcore": false,
+            "name": "Tojima Wants to Be a Kamen Rider",
+            "vote_average": 7.46,
+            "vote_count": 25
+        },
+        {
+            "adult": false,
+            "backdrop_path": "/4QwxPBOohSQX3nPFN6pb6uBosMd.jpg",
+            "genre_ids": [
+                16,
+                9648,
+                10765
+            ],
+            "id": 278604,
+            "origin_country": [
+                "JP"
+            ],
+            "original_language": "ja",
+            "original_name": "\u30b0\u30ce\u30fc\u30b7\u30a2",
+            "overview": "When a shapeshifting enemy known as Gnosia infiltrates a lone spaceship, the crew has only one way to survive: identify the imposter each day and put them into cryo-sleep. But for Yuri, the day never ends. Trapped in a time loop, she relives the first day of the crisis over and over. To escape, Yuri must uncover the truth behind Gnosia and the time loop itself\u2014before it\u2019s too late.",
+            "popularity": 13.2932,
+            "poster_path": "/dlQHZqADmu6mEsNUo2eA4FffAMt.jpg",
+            "first_air_date": "2025-10-12",
+            "softcore": false,
+            "name": "GNOSIA",
+            "vote_average": 8.0,
+            "vote_count": 21
+        },
+        {
+            "adult": false,
+            "backdrop_path": "/xaToO3TYQcUgOZnY3hC1MGJAeR0.jpg",
+            "genre_ids": [
+                16,
+                35
+            ],
+            "id": 289217,
+            "origin_country": [
+                "JP"
+            ],
+            "original_language": "ja",
+            "original_name": "\u30a2\u30eb\u30de\u3061\u3083\u3093\u306f\u5bb6\u65cf\u306b\u306a\u308a\u305f\u3044",
+            "overview": "She's small. She's sweet. She's\u2026capable of obliterating a tank in under three seconds?! Built by Enji and Suzume, two underappreciated genius scientists, Alma is the ultimate self-learning AI. There\u2019s just one thing: She thinks they\u2019re her mom and dad! Now as unexpected co-parents, the duo must hide their budding romantic feelings while taking on the messiest experiment of all: family life!",
+            "popularity": 15.1705,
+            "poster_path": "/n73fDZchQ1xdD6XWFuajHFjIWzi.jpg",
+            "first_air_date": "2025-10-05",
+            "softcore": false,
+            "name": "Alma-chan Wants to Be a Family!",
+            "vote_average": 7.5,
+            "vote_count": 14
+        },
+        {
+            "adult": false,
+            "backdrop_path": "/9B5LzLJ26cq80rwnItaW4sf6EOS.jpg",
+            "genre_ids": [
+                16,
+                10765,
+                35
+            ],
+            "id": 274814,
+            "origin_country": [
+                "JP"
+            ],
+            "original_language": "ja",
+            "original_name": "\u60aa\u98df\u4ee4\u5b22\u3068\u72c2\u8840\u516c\u7235 \uff5e\u305d\u306e\u9b54\u7269\u3001\u79c1\u304c\u7f8e\u5473\u3057\u304f\u3044\u305f\u3060\u304d\u307e\u3059!\uff5e",
+            "overview": "Any proper noble lady must cultivate refined tastes, and Lady Melphiera's delicacy of choice is\u2026monsters! Unfortunately, society frowns upon such unladylike cravings and brands her the \"Voracious Villainess.\" At a banquet, she's attacked by a monster, only to be saved by the feared \"Blood-Mad Duke.\" He's brutal, mysterious, and charming. Could he be the one to appreciate her monstrous appetite?",
+            "popularity": 13.3747,
+            "poster_path": "/yab0QzxTOGgBK1WTkHfU4s7BhF9.jpg",
+            "first_air_date": "2025-10-03",
+            "softcore": false,
+            "name": "Pass the Monster Meat, Milady!",
+            "vote_average": 8.4,
+            "vote_count": 30
+        },
+        {
+            "adult": false,
+            "backdrop_path": "/vnTrREtP0qBSmZHEEZR515FAXXB.jpg",
+            "genre_ids": [
+                16,
+                10759,
+                10765,
+                18
+            ],
+            "id": 278635,
+            "origin_country": [
+                "JP"
+            ],
+            "original_language": "ja",
+            "original_name": "\u4fe1\u3058\u3066\u3044\u305f\u4ef2\u9593\u9054\u306b\u30c0\u30f3\u30b8\u30e7\u30f3\u5965\u5730\u3067\u6bba\u3055\u308c\u304b\u3051\u305f\u304c\u30ae\u30d5\u30c8\u300e\u7121\u9650\u30ac\u30c1\u30e3\u300f\u3067\u30ec\u30d9\u30eb9999\u306e\u4ef2\u9593\u9054\u3092\u624b\u306b\u5165\u308c\u3066\u5143\u30d1\u30fc\u30c6\u30a3\u30fc\u30e1\u30f3\u30d0\u30fc\u3068\u4e16\u754c\u306b\u5fa9\u8b90\uff06\u300e\u3056\u307e\u3041\uff01\u300f\u3057\u307e\u3059\uff01",
+            "overview": "God created nine races in the ancient times. Humans were the weakest, most ridiculed race among them. Light, a human boy, was fortunate enough to be invited to join a party of all nine races called the \"Assembly of the Races.\" He was happy being a member for a while, but that was a short dream. His hopes were only to be betrayed by his fellow members at the largest, most heinous dungeon \"Abyss.\" After surviving by himself at the bottom of Abyss, Light learns the true meaning of his gift \"Unlimited Gacha.\" Light will rise from the worst despair to build his own empire of the strongest players.",
+            "popularity": 14.2558,
+            "poster_path": "/8hhOcbDKJZvOD67N8GT0kdjNjd9.jpg",
+            "first_air_date": "2025-10-03",
+            "softcore": false,
+            "name": "My Gift Lvl 9999 Unlimited Gacha: Backstabbed in a Backwater Dungeon, I'm Out for Revenge!",
+            "vote_average": 8.23,
+            "vote_count": 102
+        },
+        {
+            "adult": false,
+            "backdrop_path": "/iPHdO30TG4XRourcAVwGXjbwi87.jpg",
+            "genre_ids": [
+                16,
+                35
+            ],
+            "id": 286388,
+            "origin_country": [
+                "JP"
+            ],
+            "original_language": "ja",
+            "original_name": "\u9854\u306b\u51fa\u306a\u3044\u67cf\u7530\u3055\u3093\u3068\u9854\u306b\u51fa\u308b\u592a\u7530\u541b",
+            "overview": "Kashiwada-san's face is a masterpiece of stoicism. Her classmate Oota-kun? A walking explosion of emotions determined to crack her calm with over-the-top antics. (Spoiler: It's not working.) But between his failed surprises and her secret smiles, these polar-opposite classmates might just be into each other! Witness a rom-com where love speaks louder than expressions.",
+            "popularity": 13.0877,
+            "poster_path": "/ve5crOg8lV3DrCb7j0LaQkVhvDp.jpg",
+            "first_air_date": "2025-10-04",
+            "softcore": false,
+            "name": "Inexpressive Kashiwada and Expressive Oota",
+            "vote_average": 7.233,
+            "vote_count": 15
+        },
+        {
+            "adult": false,
+            "backdrop_path": "/sTGjtF4gQgf1pUGR9TSOPDmEmuZ.jpg",
+            "genre_ids": [
+                16,
+                10765
+            ],
+            "id": 294867,
+            "origin_country": [
+                "JP"
+            ],
+            "original_language": "ja",
+            "original_name": "\u6c38\u4e45\u306e\u30e6\u30a6\u30b0\u30ec",
+            "overview": "When tensions around AI spark civil unrest, Akira is caught in the crossfire when he protects his girlfriend from an assassin. Hundreds of years later, he awakens from cryogenic sleep to an unfamiliar world and bonds with the android Yuugure.",
+            "popularity": 11.9688,
+            "poster_path": "/xfCA7LKaIE6JbswEVUITSrl6FiH.jpg",
+            "first_air_date": "2025-10-03",
+            "softcore": false,
+            "name": "Dusk Beyond the End of the World",
+            "vote_average": 7.3,
+            "vote_count": 30
+        },
+        {
+            "adult": false,
+            "backdrop_path": "/sHXIR3lAWZFIm1h70OFAFcdBXmN.jpg",
+            "genre_ids": [
+                16,
+                35
+            ],
+            "id": 276349,
+            "origin_country": [
+                "JP"
+            ],
+            "original_language": "ja",
+            "original_name": "\u77e2\u91ce\u304f\u3093\u306e\u666e\u901a\u306e\u65e5\u3005",
+            "overview": "Kiyoko Yoshida is an overanxious class representative who can\u2019t help but worry about Tsuyoshi Yano, who sits beside her. Tsuyoshi comes to school covered in bruises, and as Kiyoko tends to him day after day, the two draw closer. Where will Kiyoko\u2019s feelings take her? Will Tsuyoshi\u2019s life ever be normal?",
+            "popularity": 12.788,
+            "poster_path": "/kExjEL79wXEn8v4nk8iQp9s9T53.jpg",
+            "first_air_date": "2025-10-01",
+            "softcore": false,
+            "name": "Yano-kun's Ordinary Days",
+            "vote_average": 7.3,
+            "vote_count": 31
+        },
+        {
+            "adult": false,
+            "backdrop_path": "/fXG8thbINNdRDpWKpizm38ypDpb.jpg",
+            "genre_ids": [
+                16,
+                35
+            ],
+            "id": 301747,
+            "origin_country": [
+                "JP"
+            ],
+            "original_language": "ja",
+            "original_name": "\u5143\u7956\uff01\u30d0\u30f3\u30c9\u30ea\u3061\u3083\u3093",
+            "overview": "After taking the girls' band world by storm, \"BanG Dream Chan\" is back!? Get ready for a huge reunion with all your favorite pop and cute band members in the fun-filled girls' band comedy! Come on, BanG Dream Chan! We are all BanG Dream Chan!",
+            "popularity": 15.9316,
+            "poster_path": "/166Zsq2TYqjbJr2v5CBU0TZnLNe.jpg",
+            "first_air_date": "2025-10-02",
+            "softcore": false,
+            "name": "GANSO! BanG Dream Chan",
+            "vote_average": 7.0,
+            "vote_count": 5
+        },
+        {
+            "adult": false,
+            "backdrop_path": "/42jDmQKtmMC2QS0AVvSyBCs7p5H.jpg",
+            "genre_ids": [
+                16,
+                35
+            ],
+            "id": 283880,
+            "origin_country": [
+                "JP"
+            ],
+            "original_language": "ja",
+            "original_name": "\u3055\u308f\u3089\u306a\u3044\u3067\u5c0f\u624b\u6307\u304f\u3093",
+            "overview": "Kouyou Kotesashi, a sports doctor with massage skills, enrolls at Seiwa University Affiliated High School to secure a scholarship. He works as a live-in dorm manager, managing the school's talented female athletes and managing their well-being through intense training and massage therapy.",
+            "popularity": 11.7253,
+            "poster_path": "/qTlVmoB4lcPcZaxUKF63Hqu2gUg.jpg",
+            "first_air_date": "2025-10-06",
+            "softcore": false,
+            "name": "Hands off: Sawaranaide Kotesashi-kun",
+            "vote_average": 7.6,
+            "vote_count": 33
+        },
+        {
+            "adult": false,
+            "backdrop_path": "/ybdN4cyWBlfgamgYca2XwYL2Kqn.jpg",
+            "genre_ids": [
+                16,
+                10759,
+                9648
+            ],
+            "id": 258901,
+            "origin_country": [
+                "JP"
+            ],
+            "original_language": "ja",
+            "original_name": "SANDA",
+            "overview": "In near-future Japan with ultra-low birthrates, children are treasured but monitored. Santa is banned as dangerous. One snowy December 25th, middle-schooler Kazushige Sanda, descendant of Santa, is attacked by classmate Fuyumura who wants him to find her missing friend, Ono. \"Santa, please find my friend.\" To protect children from adults, Sanda decides to become Santa and fight the adults.",
+            "popularity": 11.8689,
+            "poster_path": "/ab36zMKFexfl3ROR48UcJQ8AuY4.jpg",
+            "first_air_date": "2025-10-04",
+            "softcore": false,
+            "name": "SANDA",
+            "vote_average": 7.5,
+            "vote_count": 43
+        },
+        {
+            "adult": false,
+            "backdrop_path": "/xmw3Ozf1wFslq9F9H2SWaDIYlKT.jpg",
+            "genre_ids": [
+                16,
+                10759,
+                10765
+            ],
+            "id": 286984,
+            "origin_country": [
+                "JP"
+            ],
+            "original_language": "ja",
+            "original_name": "\u5473\u65b9\u304c\u5f31\u3059\u304e\u3066\u88dc\u52a9\u9b54\u6cd5\u306b\u5fb9\u3057\u3066\u3044\u305f\u5bae\u5ef7\u9b54\u6cd5\u5e2b\u3001\u8ffd\u653e\u3055\u308c\u3066\u6700\u5f37\u3092\u76ee\u6307\u3059",
+            "overview": "Once a loyal court magician supporting the crown prince from behind the scenes, Alec Ygret is cast aside and exiled for only knowing support magic. But just as he hits rock bottom, he reunites with Yorha Eisentz, a former comrade from the legendary party Lasting Period. Invited to rejoin the team that once made history, Alec returns to dungeon exploration\u2014and begins a new chapter in his life!",
+            "popularity": 10.6788,
+            "poster_path": "/tmGjjRN9dRFzybRLSecgxNo46IE.jpg",
+            "first_air_date": "2025-10-04",
+            "softcore": false,
+            "name": "The Banished Court Magician Aims to Become the Strongest",
+            "vote_average": 6.9,
+            "vote_count": 27
+        }
+    ],
+    "total_pages": 4,
+    "total_results": 64
+}
