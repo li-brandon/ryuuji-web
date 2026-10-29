@@ -1,0 +1,54 @@
+.detail { display: grid; gap: var(--space-6); min-width: 0; }
+.back { justify-self: start; display: inline-flex; align-items: center; min-height: var(--tap); padding-right: var(--space-2); color: var(--text-2); font-size: var(--text-sm); }
+.loading { display: grid; gap: var(--space-3); margin-top: var(--space-4); }
+.header { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: var(--space-4); align-items: start; }
+.poster { width: 100%; border-radius: var(--radius-lg); box-shadow: var(--shadow-2); }
+.info { display: grid; gap: var(--space-2); min-width: 0; }
+.info h1 { margin: 0; font-family: var(--font-display); font-size: var(--text-2xl); line-height: var(--leading-tight); overflow-wrap: anywhere; }
+.info p { margin: 0; }
+.meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); color: var(--text-2); font-size: var(--text-sm); }
+.genres { color: var(--text-2); font-size: var(--text-sm); }
+.progress { font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
+.tag { padding: 2px var(--space-2); border-radius: var(--radius-full); background: color-mix(in srgb, var(--status-rewatching) 14%, transparent); color: var(--status-rewatching); font-size: var(--text-xs); font-weight: var(--weight-semibold); white-space: nowrap; }
+.rewatch { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); color: var(--status-rewatching); font-weight: var(--weight-semibold); }
+.fields, .actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.status { display: inline-flex; align-items: center; gap: var(--space-1); min-height: var(--tap); padding: 0 var(--space-2); border: 1px solid var(--border-strong); border-radius: var(--radius-full); background: var(--surface); color: var(--text-2); cursor: pointer; }
+.score { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--text-2); }
+.score select { min-height: var(--tap); border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); color: var(--text); padding: 0 var(--space-2); font: inherit; }
+.overview { grid-column: 1 / -1; margin: 0; color: var(--text-2); line-height: var(--leading); }
+.notes { display: grid; gap: var(--space-2); font-weight: var(--weight-semibold); }
+.notes textarea { min-height: 72px; padding: var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); color: var(--text); font: inherit; font-weight: normal; resize: vertical; }
+.hint { color: var(--text-2); font-size: var(--text-xs); font-weight: normal; }
+.movie { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.watched { margin: 0; color: var(--success); font-weight: var(--weight-semibold); }
+.empty { color: var(--text-2); }
+.season { display: grid; gap: var(--space-2); }
+.seasonHeader { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.seasonToggle { display: inline-flex; align-items: center; gap: var(--space-2); min-height: var(--tap); padding: 0; border: 0; background: none; color: var(--text); font: inherit; font-size: var(--text-lg); font-weight: var(--weight-bold); cursor: pointer; }
+.count { color: var(--text-2); font-size: var(--text-sm); font-weight: normal; font-variant-numeric: tabular-nums; }
+.episodes { margin: 0; padding: var(--space-1) var(--space-2); list-style: none; border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-1); }
+.episode {
+  display: grid; grid-template-columns: var(--tap) 3ch minmax(0, 1fr) auto auto; grid-template-areas: "check num name tag menu" "check num date tag menu";
+  align-items: center; column-gap: var(--space-2); min-height: 56px; border-bottom: 1px solid var(--border);
+}
+.episode:last-child { border-bottom: 0; }
+/* The label is the 44px hit area; the checkbox visual stays small. */
+.check { grid-area: check; display: flex; align-items: center; justify-content: center; width: var(--tap); height: var(--tap); cursor: pointer; }
+.check input { width: 22px; height: 22px; margin: 0; accent-color: var(--accent); cursor: inherit; }
+.number { grid-area: num; color: var(--text-2); font-size: var(--text-sm); font-variant-numeric: tabular-nums; text-align: right; }
+.name { grid-area: name; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.episode .tag { grid-area: tag; }
+.date { grid-area: date; color: var(--text-2); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+.episode > button { grid-area: menu; }
+/* Full 44px hit area for the small "Mark season" and "•••" buttons. */
+.seasonHeader > button, .episode > button { min-height: var(--tap); min-width: var(--tap); }
+.unaired .name, .unaired .date { color: var(--text-2); opacity: 0.7; }
+.menu { display: flex; flex-direction: column; gap: var(--space-2); }
+.menu p { margin: var(--space-2) 0 0; }
+@media (min-width: 768px) {
+  .header { grid-template-columns: 200px minmax(0, 1fr); grid-template-rows: auto 1fr; column-gap: var(--space-6); row-gap: var(--space-4); }
+  .poster { grid-row: span 2; }
+  .info h1 { font-size: var(--text-3xl); }
+  .overview { grid-column: 2; }
+  .episode { grid-template-columns: var(--tap) 3ch minmax(0, 1fr) auto auto auto; grid-template-areas: "check num name tag date menu"; min-height: 48px; }
+}

@@ -9,6 +9,11 @@ export class UndoStack {
     this.steps.push({ name, undo });
   }
 
+  /** How many steps are registered; compare before and after an action to see if it registered one. */
+  get size(): number {
+    return this.steps.length;
+  }
+
   get canUndo(): boolean {
     return this.steps.length > 0;
   }

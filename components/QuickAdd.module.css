@@ -206,3 +206,47 @@ dialog.sheet {
 .passcode .hint {
   padding: 0;
 }
+
+/* Add with a status: tap targets on phones, Cmd/Ctrl-1 to 6 hints on desktop. */
+.shortcuts {
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-4);
+  overflow-x: auto;
+}
+
+.shortcuts button {
+  flex: none;
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-xs);
+}
+
+.shortcuts button:disabled {
+  opacity: 0.45;
+}
+
+.shortcuts kbd {
+  display: none;
+  color: var(--text-2);
+  font-family: inherit;
+}
+
+@media (min-width: 768px) {
+  .shortcuts {
+    flex-wrap: wrap;
+  }
+
+  .shortcuts kbd {
+    display: inline;
+  }
+
+  .shortcuts button {
+    min-height: 32px;
+  }
+}

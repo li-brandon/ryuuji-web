@@ -5,7 +5,7 @@ import { isWatched, rewatchCount, rewatchProgress, titleProgress, type Episode }
 import { LibraryRepository, openLibraryDB } from "./storage";
 import type { ShowStatus, ListStatus, Title, TitleKey } from "./types";
 import { UndoStack } from "./undo-stack";
-import { allowedStatuses, InvalidStatusError, WatchLogService } from "./watch-log";
+import { allowedStatuses, canStartRewatch, InvalidStatusError, WatchLogService } from "./watch-log";
 
 // Ports RyuujiTests/Services/WatchLogServiceTests.swift (specs/watch-log), against fake-indexeddb.
 
@@ -482,5 +482,94 @@ describe("guided rewatch (LIB-293)", () => {
     await service.startRewatch(show);
     await service.unmark(show, episodes[2]);
     expect(await status(show)).toBe("rewatching");
+  });
+});
+
+describe("title detail (LIB-415)", () => {
+  it("marks up to an episode across seasons, skipping specials, as one undo step with a shared batch id", async () => {
+    const episodes = [...F.season(0, 2), ...F.season(1, 3), ...F.season(2, 3)];
+    const show = await makeShow(episodes, "watching");
+    const undo = new UndoStack();
+    await service.log(show, episodes[3]);
+    await service.bulkMark(show, { upTo: episodes[6] }, undo);
+
+    const added = (await events(show)).filter((e) => e.batchId);
+    expect(added.map((e) => `${e.season}:${e.episode}`).sort()).toEqual(["1:1", "1:3", "2:1", "2:2"]);
+    expect(new Set(added.map((e) => e.batchId)).size).toBe(1);
+    expect(undo.size).toBe(1);
+    expect(undo.undoActionName).toBe("Mark Up To Episode");
+
+    await undo.undo();
+    expect(await events(show)).toHaveLength(1);
+  });
+
+  it("marks up to a special within specials only", async () => {
+    const episodes = [...F.season(0, 3), ...F.season(1, 2)];
+    const show = await makeShow(episodes);
+    await service.bulkMark(show, { upTo: episodes[1] });
+    expect((await events(show)).map((e) => `${e.season}:${e.episode}`).sort()).toEqual(["0:1", "0:2"]);
+  });
+
+  it("registers one undo step per bulk action, each reverting only itself", async () => {
+    const episodes = [...F.season(1, 2), ...F.season(2, 2), ...F.season(3, 2)];
+    const show = await makeShow(episodes, "watching");
+    const undo = new UndoStack();
+    await service.bulkMark(show, { season: 1 }, undo);
+    await service.bulkMark(show, { upTo: episodes[2] }, undo);
+    await service.bulkMark(show, "all", undo);
+    expect(undo.size).toBe(3);
+    expect(await events(show)).toHaveLength(6);
+
+    await undo.undo();
+    expect(await events(show)).toHaveLength(3);
+    await undo.undo();
+    expect(await events(show)).toHaveLength(2);
+    await undo.undo();
+    expect(await events(show)).toHaveLength(0);
+    expect(await status(show)).toBe("watching");
+  });
+
+  it("toggles an episode on and off with one undo step each", async () => {
+    const episodes = F.season(1, 2);
+    const show = await makeShow(episodes, "watching", "Ended");
+    const undo = new UndoStack();
+    await service.log(show, episodes[0], undo);
+    await service.log(show, episodes[1], undo);
+    expect(await status(show)).toBe("completed");
+    await service.unmark(show, episodes[1], undo);
+    expect(undo.size).toBe(3);
+    expect(await status(show)).toBe("watching");
+    expect(await events(show)).toHaveLength(1);
+
+    await undo.undo();
+    expect(await status(show)).toBe("completed");
+    expect(await events(show)).toHaveLength(2);
+  });
+
+  it("starts a rewatch that restarts progress from the log and keeps earlier history", async () => {
+    const episodes = F.season(1, 3);
+    const show = await makeShow(episodes, "watching", "Ended");
+    await service.bulkMark(show, "all");
+    const history = await events(show);
+    const undo = new UndoStack();
+    await service.startRewatch(show, undo);
+    expect(await status(show)).toBe("rewatching");
+    expect(undo.size).toBe(1);
+
+    expect(rewatchProgress(await progress(show))).toMatchObject({ number: 1, watchedCount: 0, next: episodes[0] });
+    await service.log(show, episodes[0], undo);
+    const after = await events(show);
+    expect(after).toHaveLength(4);
+    expect(after).toEqual(expect.arrayContaining(history));
+    expect(rewatchProgress(await progress(show))).toMatchObject({ number: 1, watchedCount: 1, next: episodes[1] });
+  });
+
+  it("checks rewatch eligibility from progress", async () => {
+    const episodes = F.season(1, 1);
+    const show = await makeShow(episodes, "completed");
+    const title = (await repo.getTitle(show)) as Title;
+    expect(canStartRewatch(title, await progress(show))).toBe(false);
+    await service.log(show, episodes[0]);
+    expect(canStartRewatch((await repo.getTitle(show)) as Title, await progress(show))).toBe(true);
   });
 });
