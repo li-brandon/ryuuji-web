@@ -1,0 +1,2 @@
+import { titleSchema } from "../../lib/types";
+export const show = titleSchema.parse({ tmdbId: 1, kind: "show", name: "Show", originalName: "Show", overview: "", genres: [], originCountries: [], originalLanguage: "en", isAnime: false, metadataRevision: 1, notes: "Keep", score: 8, status: "caughtUp", addedAt: "2026-01-01T00:00:00Z", showStatus: "Returning Series", episodes: { schemaVersion: 1, seasons: [] } });

@@ -1,5 +1,6 @@
 "use client";
 
+import { useLibraryChanges } from "@/lib/library-changes";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { WatchProviderBadges, JustWatchAttribution } from "@/components/WatchProviders";
 import { QuickAddButton } from "@/components/QuickAdd";
@@ -41,6 +42,8 @@ export default function UpNextPage() {
     });
     return () => { cancelled = true; };
   }, []);
+
+  useLibraryChanges(refresh);
 
   const undo = useCallback(async () => {
     if (lock.current || !undoStack.current.canUndo) return;
