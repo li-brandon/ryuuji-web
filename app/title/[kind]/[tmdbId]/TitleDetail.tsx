@@ -13,6 +13,7 @@ import { useToast } from "@/components/ui/Toast";
 import { isAired, today as localToday } from "@/lib/air-date";
 import { isSpecial, rewatchProgress, titleProgress, watchCount, type Episode } from "@/lib/progress";
 import { posterUrl, refreshTitle } from "@/lib/quick-add";
+import { debouncedSave, type DebouncedSave } from "@/lib/debounced-save";
 import { libraryRepository } from "@/lib/storage";
 import { TMDBRequestError } from "@/lib/tmdb-client";
 import { LIST_STATUSES, type ListStatus, type Title, type TitleKey, type WatchEvent } from "@/lib/types";
@@ -281,7 +282,7 @@ function Season({ name, episodes, today, busy, watchedCount, onMarkSeason, onTog
             const isAiredEp = isAired(e.airDate, today);
             return (
               <li key={e.tmdbId} className={cx(styles.episode, !isAiredEp && styles.unaired)}>
-                <input type="checkbox" checked={count > 0} disabled={busy || (!isAiredEp && count === 0)} aria-label={`Watched ${code(e)} ${e.name}`} onChange={() => onToggle(e, count > 0)} />
+                <label className={styles.check}><input type="checkbox" checked={count > 0} disabled={busy || (!isAiredEp && count === 0)} aria-label={`Watched ${code(e)} ${e.name}`} onChange={() => onToggle(e, count > 0)} /></label>
                 <span className={styles.number}>{isSpecial(e) ? `SP${e.number}` : e.number}</span>
                 <span className={styles.name}>{e.name}</span>
                 {count > 1 && <span className={styles.tag} title={`Rewatched ${count - 1} time${count === 2 ? "" : "s"}`}>×{count}</span>}
@@ -318,38 +319,33 @@ function ScoreSelect({ title, onSaved }: { title: Title; onSaved: () => Promise<
   );
 }
 
-/** Notes save after typing pauses, and on blur or leaving the page. */
+/** Notes save after typing pauses, on blur, and when the page is hidden or unloaded. */
 function Notes({ title }: { title: Title }) {
   const [notes, setNotes] = useState(title.notes);
   const [saved, setSaved] = useState<"saved" | "saving" | "failed" | null>(null);
-  const pending = useRef<string | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const key = useRef<TitleKey>({ tmdbId: title.tmdbId, kind: title.kind });
+  const saver = useRef<DebouncedSave<string>>(null);
 
-  const flush = useCallback(async () => {
-    clearTimeout(timer.current);
-    const value = pending.current;
-    if (value === null) return;
-    pending.current = null;
-    try {
-      await (await libraryRepository()).updateTitle(key.current, { notes: value });
-      setSaved("saved");
-    } catch {
-      setSaved("failed");
-    }
-  }, []);
-
-  useEffect(() => () => void flush(), [flush]);
+  useEffect(() => {
+    const key: TitleKey = { tmdbId: title.tmdbId, kind: title.kind };
+    const save = debouncedSave<string>(async (value) => {
+      try {
+        await (await libraryRepository()).updateTitle(key, { notes: value });
+        setSaved("saved");
+      } catch {
+        setSaved("failed");
+      }
+    }, NOTES_DEBOUNCE_MS);
+    saver.current = save;
+    return () => save.dispose();
+  }, [title.tmdbId, title.kind]);
 
   return (
     <label className={styles.notes}>
       <span>Notes <span className={styles.hint} role="status">{saved === "saving" ? "Saving…" : saved === "saved" ? "Saved" : saved === "failed" ? "Couldn’t save notes" : ""}</span></span>
-      <textarea value={notes} rows={3} onBlur={() => void flush()} onChange={(e) => {
+      <textarea value={notes} rows={3} onBlur={() => void saver.current?.flush()} onChange={(e) => {
         setNotes(e.target.value);
         setSaved("saving");
-        pending.current = e.target.value;
-        clearTimeout(timer.current);
-        timer.current = setTimeout(() => void flush(), NOTES_DEBOUNCE_MS);
+        saver.current?.schedule(e.target.value);
       }} />
     </label>
   );

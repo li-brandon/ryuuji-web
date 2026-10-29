@@ -210,6 +210,21 @@ describe("refreshTitle (LIB-415)", () => {
     expect(await library.listWatchEvents(bb)).toEqual([event]);
   });
 
+  it("keeps notes and a score edited while the fetch is in flight", async () => {
+    const library = await repo();
+    await addTitle(library, bb, "planToWatch", { fetcher: fetcher(), now });
+    await library.updateTitle(bb, { score: 5, notes: "before" });
+    const inner = fetcher();
+    const editing = vi.fn(async (...args: Parameters<Fetcher>) => {
+      await library.updateTitle(bb, { score: 8, notes: "typed during refresh" });
+      return inner(...args);
+    }) as unknown as Fetcher;
+
+    const refreshed = await refreshTitle(library, bb, { fetcher: editing, now, today: "2026-10-29" });
+    expect(refreshed).toMatchObject({ score: 8, notes: "typed during refresh" });
+    expect(await library.getTitle(bb)).toMatchObject({ score: 8, notes: "typed during refresh" });
+  });
+
   it("applies the refresh status rule", async () => {
     const library = await repo();
     await addTitle(library, bb, "planToWatch", { fetcher: fetcher(), now });

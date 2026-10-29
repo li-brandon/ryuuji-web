@@ -1,5 +1,5 @@
 .detail { display: grid; gap: var(--space-6); min-width: 0; }
-.back { justify-self: start; color: var(--text-2); font-size: var(--text-sm); }
+.back { justify-self: start; display: inline-flex; align-items: center; min-height: var(--tap); padding-right: var(--space-2); color: var(--text-2); font-size: var(--text-sm); }
 .loading { display: grid; gap: var(--space-3); margin-top: var(--space-4); }
 .header { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: var(--space-4); align-items: start; }
 .poster { width: 100%; border-radius: var(--radius-lg); box-shadow: var(--shadow-2); }
@@ -32,12 +32,16 @@
   align-items: center; column-gap: var(--space-2); min-height: 56px; border-bottom: 1px solid var(--border);
 }
 .episode:last-child { border-bottom: 0; }
-.episode input { grid-area: check; justify-self: center; width: 22px; height: 22px; margin: 0; accent-color: var(--accent); }
+/* The label is the 44px hit area; the checkbox visual stays small. */
+.check { grid-area: check; display: flex; align-items: center; justify-content: center; width: var(--tap); height: var(--tap); cursor: pointer; }
+.check input { width: 22px; height: 22px; margin: 0; accent-color: var(--accent); cursor: inherit; }
 .number { grid-area: num; color: var(--text-2); font-size: var(--text-sm); font-variant-numeric: tabular-nums; text-align: right; }
 .name { grid-area: name; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .episode .tag { grid-area: tag; }
 .date { grid-area: date; color: var(--text-2); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
 .episode > button { grid-area: menu; }
+/* Full 44px hit area for the small "Mark season" and "•••" buttons. */
+.seasonHeader > button, .episode > button { min-height: var(--tap); min-width: var(--tap); }
 .unaired .name, .unaired .date { color: var(--text-2); opacity: 0.7; }
 .menu { display: flex; flex-direction: column; gap: var(--space-2); }
 .menu p { margin: var(--space-2) 0 0; }
