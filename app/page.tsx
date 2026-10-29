@@ -1,9 +1,8 @@
-import { APP_NAME } from "@/lib/app";
-
-export default function Home() {
+export default function UpNextPage() {
   return (
-    <main>
-      <h1>{APP_NAME}</h1>
-    </main>
+    <>
+      <h1>Up Next</h1>
+      <p className="muted">Nothing here yet. Press ⌘K / Ctrl-K or tap Search to add a movie or show.</p>
+    </>
   );
 }

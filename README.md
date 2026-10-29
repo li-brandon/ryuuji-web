@@ -26,6 +26,7 @@ Open http://localhost:3000.
 | `npm run typecheck` | TypeScript check (`tsc --noEmit`) |
 | `npm test`          | Unit tests (Vitest)               |
 | `npm run check:bundle` | Fail if server secrets appear in `.next/static` (run after `build`) |
+| `node scripts/screenshots.mjs [outDir]` | Layout screenshots (375px + desktop) with a mocked TMDB proxy; needs a running dev server (`BASE_URL`, default `http://localhost:3000`) and `npx playwright install chromium`. Not run in CI. |
 
 CI (`.github/workflows/ci.yml`) runs lint, typecheck, test, and build on every pull request and on pushes to `main`. The build uses sentinel `TMDB_TOKEN` / `RYUUJI_PASSCODE` values, then `check:bundle` fails if those values or the variable names show up in client assets.
 
