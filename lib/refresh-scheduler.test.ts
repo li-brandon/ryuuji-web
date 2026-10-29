@@ -20,7 +20,7 @@ async function setup(locks?: Pick<LockManager, "request">) {
   let online = true;
   const changed = vi.fn();
   // Empty show response is valid mapper input; no external requests.
-  const fetcher = vi.fn(async () => ({ id: 1, name: "Refreshed", status: "Returning Series", genres: [], seasons: [], results: {} }));
+  const fetcher = vi.fn(async () => ({ id: 1, name: "Refreshed", title: "Refreshed movie", status: "Returning Series", genres: [], seasons: [], results: {} }));
   const scheduler = new RefreshScheduler({ repository: async () => repo, storage, document, window, online: () => online, changed, locks, fetcher: async <T>() => JSON.parse(JSON.stringify(await fetcher())) as T, yield: async () => {} });
   return { scheduler, repo, db, storage, document, window, changed, fetcher, offline: () => { online = false; }, online: () => { online = true; } };
 }
@@ -131,7 +131,7 @@ describe("refresh scheduler", () => {
       const scheduler = new RefreshScheduler({
         repository: async () => repo, storage, document: Object.assign(new EventTarget(), { visibilityState: "visible" as const }), window: new EventTarget(),
         online: () => true, changed,
-        fetcher: async <T>() => ({ id: 1, name: "Refreshed", status: "Returning Series", genres: [], seasons: [], results: {} }) as T,
+        fetcher: async <T>() => ({ id: 1, name: "Refreshed", title: "Refreshed movie", status: "Returning Series", genres: [], seasons: [], results: {} }) as T,
       });
       await scheduler.refresh(true);
       expect(changed).toHaveBeenCalledTimes(1);
@@ -142,4 +142,25 @@ describe("refresh scheduler", () => {
       vi.unstubAllGlobals();
     }
   });
+});
+
+it("queues imported movies and fresh ended shows without changing cached data offline, then retries", async () => {
+  const s = await setup();
+  const movie = { ...show, tmdbId: 129, kind: "movie" as const, episodes: null };
+  const ended = { ...show, showStatus: "Ended" as const, lastRefreshedAt: new Date().toISOString() };
+  await s.repo.createTitle(movie);
+  await s.repo.updateTitle(show, ended);
+  s.storage.setItem(LAST_REFRESH_KEY, String(Date.now()));
+  s.offline();
+  s.scheduler.queueTitles([movie, ended]);
+  expect(s.fetcher).not.toHaveBeenCalled();
+  expect(await s.repo.getTitle(movie)).toEqual(movie);
+  expect(await s.repo.getTitle(show)).toEqual(ended);
+  expect(JSON.parse(s.storage.getItem("ryuuji-import-refresh") ?? "[]")).toHaveLength(2);
+  s.online();
+  await s.scheduler.refresh(false);
+  expect((await s.repo.getTitle(movie))?.metadataRevision).toBe(movie.metadataRevision + 1);
+  expect((await s.repo.getTitle(show))?.metadataRevision).toBe(ended.metadataRevision + 1);
+  expect(s.storage.getItem("ryuuji-import-refresh")).toBe("[]");
+  s.db.close();
 });

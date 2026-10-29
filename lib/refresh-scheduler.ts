@@ -1,5 +1,8 @@
 import { refreshTitle, type Fetcher } from "./quick-add";
 import { dueTitles, REFRESH_INTERVAL } from "./refresh";
+import type { TitleKey } from "./types";
+import { z } from "zod";
+import { kindSchema } from "./types";
 import type { LibraryRepository } from "./storage";
 
 export const LAST_REFRESH_KEY = "lastMetadataRefresh";
@@ -84,6 +87,23 @@ export class RefreshScheduler {
     }, delay);
   }
 
+  queueTitles(titles: TitleKey[]) {
+    if (!titles.length) return;
+    const queued = this.queuedTitles();
+    for (const title of titles) queued.set(`${title.kind}:${title.tmdbId}`, title);
+    this.saveQueue(queued);
+    void this.refresh(true);
+  }
+  private queuedTitles(): Map<string, TitleKey> {
+    try {
+      const titles = z.array(z.object({ tmdbId: z.int(), kind: kindSchema })).parse(JSON.parse(this.options.storage.getItem("ryuuji-import-refresh") ?? "[]"));
+      return new Map(titles.map((title) => [`${title.kind}:${title.tmdbId}`, title]));
+    } catch { return new Map(); }
+  }
+  private saveQueue(queue: Map<string, TitleKey>) {
+    try { this.options.storage.setItem("ryuuji-import-refresh", JSON.stringify([...queue.values()])); } catch { /* Best effort when storage is unavailable. */ }
+  }
+
   async refresh(force = true): Promise<void> {
     if (this.running) return;
     if (!this.options.online()) { this.publish("Offline. Refresh will retry when you’re online."); return; }
@@ -91,21 +111,28 @@ export class RefreshScheduler {
       const last = this.readLastRun();
       return last === null || this.now() - last >= REFRESH_INTERVAL;
     };
-    if (!force && !stale()) return;
+    if (!force && !stale() && !this.queuedTitles().size) return;
     this.running = true;
     this.publish("Refreshing metadata…");
     try {
       const run = async () => {
         // Recheck after acquiring the cross-tab lock.
-        if (!force && !stale()) return;
+        if (!force && !stale() && !this.queuedTitles().size) return;
         const repo = await this.options.repository();
         let refreshed = 0;
         let failed = 0;
-        for (const title of dueTitles(await repo.listTitles(), new Date(this.now()))) {
+        const all = await repo.listTitles();
+        const queued = this.queuedTitles();
+        const due = new Map(dueTitles(all, new Date(this.now())).map((title) => [`${title.kind}:${title.tmdbId}`, title]));
+        for (const title of all) if (queued.has(`${title.kind}:${title.tmdbId}`)) due.set(`${title.kind}:${title.tmdbId}`, title);
+        for (const title of due.values()) {
           if (!this.options.online()) { failed++; break; }
           try {
             await refreshTitle(repo, title, { fetcher: this.options.fetcher, now: new Date(this.now()) });
             refreshed++;
+            const pending = this.queuedTitles();
+            pending.delete(`${title.kind}:${title.tmdbId}`);
+            this.saveQueue(pending);
           } catch { failed++; }
           await (this.options.yield?.() ?? new Promise<void>((resolve) => this.setTimer(resolve, 0)));
         }

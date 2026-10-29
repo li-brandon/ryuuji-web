@@ -31,6 +31,8 @@ export function MetadataRefreshProvider({ children }: { children: React.ReactNod
   return <Context.Provider value={scheduler}>{children}</Context.Provider>;
 }
 
+export function useMetadataScheduler() { return useContext(Context); }
+
 function relativeTime(last: number | null) {
   if (last === null) return "Never refreshed";
   const minutes = Math.max(0, Math.floor((Date.now() - last) / 60000));

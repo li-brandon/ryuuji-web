@@ -116,3 +116,23 @@ Differences from the macOS storage:
   ]
 }
 ```
+
+## Web import and backup
+
+Imports validate the entire strict file before opening a write transaction. Titles match by
+TMDB id and kind; event UIDs match across the entire library. A conflicting event UID
+keeps the existing event and is reported separately in preview. Confirmation recomputes
+against current data under the watch-log lock, then commits both stores atomically.
+
+Merge rule: incoming status replaces only `planToWatch`, score replaces only `null`, and
+notes replace only blank notes. Existing non-default choices always win, regardless of
+export timestamps. Metadata fills only null, empty string, or empty array fields; false
+booleans, revision numbers, added dates, and refresh timestamps remain unchanged.
+Preview counts changed existing titles as “to merge”; identical titles are “unchanged”.
+Re-importing identical data performs no puts/adds and leaves metadataRevision unchanged.
+
+Changed titles (including titles with added events) enter the metadata scheduler's separate
+localStorage queue. Refresh retries offline/failed work and uses the existing metadata
+refresh path to remap history. Export does not clear cached timestamps or revisions.
+Backups use deterministic title/key and event/UID ordering and a consistent read transaction.
+Settings, theme, provider preferences, credentials, and secrets are excluded from version 1.
