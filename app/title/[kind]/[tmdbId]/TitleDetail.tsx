@@ -2,6 +2,7 @@
 
 import { WhereToWatch } from "@/components/WatchProviders";
 import Link from "next/link";
+import { useLibraryChanges } from "@/lib/library-changes";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
@@ -55,6 +56,7 @@ export function TitleDetail({ titleKey }: { titleKey: TitleKey }) {
   const service = useRef<WatchLogService | null>(null);
   const toast = useToast();
   const reload = useCallback(async () => setEntry(await load(titleKey)), [titleKey]);
+  useLibraryChanges(reload);
 
   useEffect(() => {
     let cancelled = false;

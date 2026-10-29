@@ -3,6 +3,7 @@
 import { WatchProviderBadges, JustWatchAttribution } from "@/components/WatchProviders";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { useLibraryChanges } from "@/lib/library-changes";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { QuickAddButton } from "@/components/QuickAdd";
 import { Button, buttonClass } from "@/components/ui/Button";
@@ -44,6 +45,8 @@ export function Library() {
     void loadLibrary().then((entries) => { if (!cancelled) setLibrary(entries); }).catch(() => { if (!cancelled) setError(true); });
     return () => { cancelled = true; };
   }, []);
+  const reload = useCallback(async () => setLibrary(await loadLibrary()), []);
+  useLibraryChanges(reload);
   const undo = useCallback(async () => {
     if (lock.current || !undoStack.current.canUndo) return;
     lock.current = true;

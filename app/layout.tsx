@@ -1,3 +1,4 @@
+import { MetadataRefreshProvider } from "@/components/MetadataRefresh";
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Inter } from "next/font/google";
 import Link from "next/link";
@@ -34,6 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <ThemeSync />
         <ToastProvider>
+          <MetadataRefreshProvider>
           <a className="skip-link" href="#content">
             Skip to content
           </a>
@@ -57,6 +59,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               {children}
             </main>
           </div>
+        </MetadataRefreshProvider>
         </ToastProvider>
       </body>
     </html>

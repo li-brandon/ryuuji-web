@@ -1,3 +1,4 @@
+import { MetadataSettings } from "@/components/MetadataRefresh";
 import { WatchProviderSettings } from "@/components/WatchProviderSettings";
 import Link from "next/link";
 import { buttonClass } from "@/components/ui/Button";
@@ -16,6 +17,7 @@ export default function SettingsPage() {
           <p>System follows your device’s light or dark setting. Your choice is saved on this device.</p>
           <ThemeToggle />
         </section>
+        <MetadataSettings />
         <WatchProviderSettings />
         <section className="section">
           <h2>Design system</h2>
