@@ -9,6 +9,7 @@ import {
   titleEpisodes,
   titleProgress,
   type Episode,
+  type Progress,
 } from "./progress";
 import { statusAfter, type StatusTrigger } from "./status-engine";
 import { TitleNotFoundError, type LibraryRepository } from "./storage";
@@ -23,6 +24,12 @@ export function allowedStatuses(kind: Kind): ListStatus[] {
   return LIST_STATUSES.filter((s) => s !== "rewatching" && (kind === "show" || s !== "caughtUp"));
 }
 
+/** Whether `title` can start a rewatch: a Completed or Caught Up show with every aired regular episode watched. */
+export function canStartRewatch(title: Title, progress: Progress): boolean {
+  if (title.kind !== "show" || (title.status !== "completed" && title.status !== "caughtUp")) return false;
+  return hasAiredRegular(progress) && progress.remaining === 0;
+}
+
 export class InvalidStatusError extends Error {
   constructor(readonly kind: Kind, readonly status: ListStatus) {
     super(`Status ${status} can't be set by hand on a ${kind}`);
@@ -31,8 +38,9 @@ export class InvalidStatusError extends Error {
 }
 
 /** Which episodes a bulk mark covers: one season's aired, unwatched episodes (season 0 only if
- * chosen explicitly), or every aired, unwatched regular episode. */
-export type BulkScope = { season: number } | "all";
+ * chosen explicitly), every aired, unwatched regular episode, or those up to and including
+ * `upTo` (within specials when `upTo` is a special). */
+export type BulkScope = { season: number } | { upTo: Episode } | "all";
 
 type Change = { added: WatchEvent[]; removed: WatchEvent[]; status?: ListStatus };
 
@@ -82,7 +90,7 @@ export class WatchLogService {
       const { title, events } = await this.load(key);
       const targets = this.unwatchedAired(scope, title, events);
       if (targets.length === 0) return;
-      const name = scope === "all" ? "Mark All Watched" : "Mark Season Watched";
+      const name = scope === "all" ? "Mark All Watched" : "season" in scope ? "Mark Season Watched" : "Mark Up To Episode";
       await this.perform(name, key, "log", undo, (title) => {
         const batchId = this.newId();
         const timestamp = this.now();
@@ -171,9 +179,7 @@ export class WatchLogService {
   }
 
   private canRewatch({ title, events }: { title: Title; events: WatchEvent[] }): boolean {
-    if (title.kind !== "show" || (title.status !== "completed" && title.status !== "caughtUp")) return false;
-    const progress = titleProgress(title, events, this.today());
-    return hasAiredRegular(progress) && progress.remaining === 0;
+    return canStartRewatch(title, titleProgress(title, events, this.today()));
   }
 
   private async completeNow(key: TitleKey, undo?: UndoStack): Promise<void> {
@@ -248,7 +254,13 @@ export class WatchLogService {
     const today = this.today();
     const progress = titleProgress(title, events, today);
     return titleEpisodes(title)
-      .filter((e) => (scope === "all" ? !isSpecial(e) : e.season === scope.season))
+      .filter((e) =>
+        scope === "all"
+          ? !isSpecial(e)
+          : "season" in scope
+            ? e.season === scope.season
+            : isSpecial(e) === isSpecial(scope.upTo) && byEpisodeOrder(e, scope.upTo) <= 0,
+      )
       .filter((e) => isAired(e.airDate, today) && !isWatched(progress, e))
       .sort(byEpisodeOrder);
   }

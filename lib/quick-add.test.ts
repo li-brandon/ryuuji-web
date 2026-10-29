@@ -4,9 +4,22 @@ import movie from "../test/fixtures/tmdb/movie-27205.json";
 import searchMovie from "../test/fixtures/tmdb/search-movie.json";
 import breakingBad from "../test/fixtures/tmdb/tv-1396.json";
 import breakingBadSeason1 from "../test/fixtures/tmdb/tv-1396-season-1.json";
-import { addTitle, isQuickAddShortcut, moveSelection, searchTitles, type Fetcher, type SearchItem } from "./quick-add";
+import {
+  addTitle,
+  existingTitleHref,
+  isQuickAddShortcut,
+  itemId,
+  moveSelection,
+  refreshTitle,
+  searchTitles,
+  shortcutStatus,
+  type Fetcher,
+  type SearchItem,
+} from "./quick-add";
 import { LibraryRepository, openLibraryDB } from "./storage";
 import { TMDBRequestError } from "./tmdb-client";
+import { UndoStack } from "./undo-stack";
+import { InvalidStatusError, WatchLogService } from "./watch-log";
 
 let dbCount = 0;
 const repo = async () => new LibraryRepository(await openLibraryDB(`quick-add-${dbCount++}`));
@@ -107,5 +120,109 @@ describe("keyboard", () => {
     expect(isQuickAddShortcut({ ...key, ctrlKey: true, key: "K" })).toBe(true);
     expect(isQuickAddShortcut(key)).toBe(false);
     expect(isQuickAddShortcut({ ...key, ctrlKey: true, shiftKey: true })).toBe(false);
+  });
+});
+
+describe("adding with a status (LIB-415)", () => {
+  const key = { key: "1", metaKey: true, ctrlKey: false, altKey: false, shiftKey: false };
+
+  it("maps Cmd/Ctrl-1 to 6 like the macOS panel", () => {
+    expect(["1", "2", "3", "4", "5", "6"].map((k) => shortcutStatus({ ...key, key: k }, "show"))).toEqual([
+      "planToWatch", "watching", "caughtUp", "onHold", "dropped", "completed",
+    ]);
+    expect(shortcutStatus({ ...key, metaKey: false, ctrlKey: true, key: "6" }, "movie")).toBe("completed");
+  });
+
+  it("ignores other keys and statuses the result's kind doesn't allow", () => {
+    expect(shortcutStatus({ ...key, key: "3" }, "movie")).toBeNull();
+    expect(shortcutStatus({ ...key, key: "7" }, "show")).toBeNull();
+    expect(shortcutStatus({ ...key, metaKey: false }, "show")).toBeNull();
+    expect(shortcutStatus({ ...key, shiftKey: true }, "show")).toBeNull();
+  });
+
+  it("opens the detail page for a title already in the library", () => {
+    expect(existingTitleHref(bb, new Set([itemId(bb)]))).toBe("/title/show/1396");
+    expect(existingTitleHref(inception, new Set([itemId(bb)]))).toBeNull();
+  });
+
+  it("adds as Completed through setStatus: logs what's aired as one undo step", async () => {
+    const library = await repo();
+    const undo = new UndoStack();
+    const fetcher = fakeFetcher({
+      "tv/1396": breakingBad,
+      "tv/1396?append_to_response=season%2F1": { ...breakingBad, "season/1": breakingBadSeason1 },
+    });
+    const watchLog = new WatchLogService(library, { now: () => now });
+    const { title } = await addTitle(library, bb, "completed", { fetcher, now, undo, watchLog });
+    expect(title.status).toBe("completed");
+    expect(await library.listWatchEvents(bb)).toHaveLength(breakingBadSeason1.episodes.length);
+    expect(undo.size).toBe(1);
+
+    await undo.undo();
+    expect((await library.getTitle(bb))?.status).toBe("planToWatch");
+    expect(await library.listWatchEvents(bb)).toEqual([]);
+  });
+
+  it("registers no undo step for the default status", async () => {
+    const library = await repo();
+    const undo = new UndoStack();
+    await addTitle(library, inception, "planToWatch", { fetcher: fakeFetcher({ "movie/27205": movie }), now, undo });
+    expect(undo.size).toBe(0);
+  });
+
+  it("rejects a status the kind doesn't allow before fetching", async () => {
+    const library = await repo();
+    const fetcher = fakeFetcher({ "movie/27205": movie });
+    await expect(addTitle(library, inception, "caughtUp", { fetcher, now })).rejects.toThrow(InvalidStatusError);
+    await expect(addTitle(library, inception, "rewatching", { fetcher, now })).rejects.toThrow(InvalidStatusError);
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(await library.listTitles()).toEqual([]);
+  });
+});
+
+describe("refreshTitle (LIB-415)", () => {
+  const fetcher = () =>
+    fakeFetcher({
+      "tv/1396": breakingBad,
+      "tv/1396?append_to_response=season%2F1": { ...breakingBad, "season/1": breakingBadSeason1 },
+    });
+
+  it("replaces metadata but keeps history and user fields", async () => {
+    const library = await repo();
+    const { title } = await addTitle(library, bb, "planToWatch", { fetcher: fetcher(), now });
+    const first = title.episodes!.seasons[0].episodes[0];
+    await library.updateTitle(bb, { name: "Old name", episodes: null, score: 9, notes: "Rewatch with friends", status: "onHold" });
+    const event = { uid: crypto.randomUUID(), tmdbId: 1396, kind: "show" as const, watchedAt: now.toISOString(), season: 1, episode: 1, tmdbEpisodeId: first.tmdbId, batchId: null };
+    await library.addWatchEvent(event);
+
+    const later = new Date("2026-10-29T12:00:00.000Z");
+    const refreshed = await refreshTitle(library, bb, { fetcher: fetcher(), now: later, today: "2026-10-29" });
+    expect(refreshed).toMatchObject({
+      name: "Breaking Bad",
+      score: 9,
+      notes: "Rewatch with friends",
+      status: "onHold",
+      addedAt: now.toISOString(),
+      lastRefreshedAt: later.toISOString(),
+      metadataRevision: title.metadataRevision + 1,
+    });
+    expect(refreshed.episodes?.seasons[0].episodes).toHaveLength(breakingBadSeason1.episodes.length);
+    expect(await library.listWatchEvents(bb)).toEqual([event]);
+  });
+
+  it("applies the refresh status rule", async () => {
+    const library = await repo();
+    await addTitle(library, bb, "planToWatch", { fetcher: fetcher(), now });
+    await library.updateTitle(bb, { status: "caughtUp" });
+    // Season 1 is aired and unwatched, so a Caught Up show goes back to Watching.
+    expect((await refreshTitle(library, bb, { fetcher: fetcher(), now, today: "2026-10-29" })).status).toBe("watching");
+  });
+
+  it("writes nothing when TMDB fails", async () => {
+    const library = await repo();
+    await addTitle(library, bb, "planToWatch", { fetcher: fetcher(), now });
+    const before = await library.getTitle(bb);
+    await expect(refreshTitle(library, bb, { fetcher: fakeFetcher({}), now })).rejects.toThrow(TMDBRequestError);
+    expect(await library.getTitle(bb)).toEqual(before);
   });
 });

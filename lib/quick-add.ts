@@ -1,8 +1,11 @@
-import type { LibraryRepository } from "./storage";
-import { DuplicateTitleError } from "./storage";
+import { today as localToday } from "./air-date";
+import { statusAfterRefresh } from "./status-engine";
+import { DuplicateTitleError, TitleNotFoundError, type LibraryRepository } from "./storage";
 import { applyMovie, applyShow, isAnime, type TMDBMovie, type TMDBSeason, type TMDBShow } from "./title-mapper";
 import { tmdbFetch } from "./tmdb-client";
 import type { Kind, ListStatus, Title, TitleKey } from "./types";
+import type { UndoStack } from "./undo-stack";
+import { allowedStatuses, InvalidStatusError, WatchLogService } from "./watch-log";
 
 // Ports the macOS app's SearchItem (TMDB/TitleMapper.swift), TMDBClient.search/show and
 // Services/TitleAdder.swift for the quick-add panel.
@@ -94,43 +97,108 @@ export async function fetchTitle(
     notes: "",
     addedAt: stamp,
   };
-  if (item.kind === "movie") return applyMovie(await fetcher<TMDBMovie>(`movie/${item.tmdbId}`), blank);
+  return fetchMetadata(blank, fetcher);
+}
 
-  const show = await fetcher<TMDBShow & { seasons?: { season_number: number }[] | null }>(`tv/${item.tmdbId}`);
+/** Re-fetches `title`'s TMDB metadata (every season, for shows) and maps it onto a copy. */
+export async function fetchMetadata(title: Title, fetcher: Fetcher = tmdbFetch): Promise<Title> {
+  if (title.kind === "movie") return applyMovie(await fetcher<TMDBMovie>(`movie/${title.tmdbId}`), title);
+
+  const show = await fetcher<TMDBShow & { seasons?: { season_number: number }[] | null }>(`tv/${title.tmdbId}`);
   const numbers = (show.seasons ?? []).map((s) => s.season_number);
   const seasons: TMDBSeason[] = [];
   for (let i = 0; i < numbers.length; i += SEASON_BATCH_SIZE) {
     const keys = numbers.slice(i, i + SEASON_BATCH_SIZE).map((n) => `season/${n}`);
-    const appended = await fetcher<Record<string, TMDBSeason | undefined>>(`tv/${item.tmdbId}`, {
+    const appended = await fetcher<Record<string, TMDBSeason | undefined>>(`tv/${title.tmdbId}`, {
       append_to_response: keys.join(","),
     });
     seasons.push(...keys.flatMap((key) => appended[key] ?? []));
   }
-  return applyShow(show, seasons, blank);
+  return applyShow(show, seasons, title);
+}
+
+/** What a refresh replaces; history, status and user fields stay. */
+const METADATA_FIELDS = [
+  "name", "originalName", "overview", "posterPath", "releaseDate", "genres", "originCountries",
+  "originalLanguage", "runtime", "isAnime", "showStatus", "episodes",
+] as const satisfies (keyof Title)[];
+
+/**
+ * Ports MetadataRefresher.refresh for one title: re-fetches metadata, keeps history and user
+ * fields, bumps `metadataRevision` and applies the refresh status rule. Throws without writing
+ * if TMDB fails.
+ */
+export async function refreshTitle(
+  repo: LibraryRepository,
+  key: TitleKey,
+  { fetcher = tmdbFetch, now = new Date(), today = localToday() }: { fetcher?: Fetcher; now?: Date; today?: string } = {},
+): Promise<Title> {
+  const title = await repo.getTitle(key);
+  if (!title) throw new TitleNotFoundError(key);
+  const fetched = await fetchMetadata(title, fetcher);
+  const metadata = {
+    ...Object.fromEntries(METADATA_FIELDS.map((field) => [field, fetched[field]])),
+    metadataRevision: title.metadataRevision + 1,
+    lastRefreshedAt: now.toISOString(),
+  };
+  const status = statusAfterRefresh({ ...title, ...metadata }, await repo.listWatchEvents(key), today);
+  // Only metadata and status: score and notes may have been edited while fetching.
+  return repo.updateTitle(key, { ...metadata, status });
 }
 
 export type AddOutcome = { outcome: "added" | "existing"; title: Title };
 
-/** Adds `item` with `status` unless it's already in the library. Throws without writing if TMDB fails. */
+/**
+ * Adds `item` unless it's already in the library. Throws without writing if TMDB fails, and
+ * `InvalidStatusError` (before fetching) for a status `allowedStatuses` doesn't offer. A
+ * non-default status is then set through `WatchLogService.setStatus`, so it follows the same
+ * rules as a manual change (Completed logs what's aired) and registers one undo step.
+ */
 export async function addTitle(
-  repo: Pick<LibraryRepository, "getTitle" | "createTitle">,
+  repo: LibraryRepository,
   item: SearchItem,
   status: ListStatus = "planToWatch",
-  options?: { fetcher?: Fetcher; now?: Date },
+  { undo, watchLog = new WatchLogService(repo), ...options }: { fetcher?: Fetcher; now?: Date; undo?: UndoStack; watchLog?: WatchLogService } = {},
 ): Promise<AddOutcome> {
+  if (!allowedStatuses(item.kind).includes(status)) throw new InvalidStatusError(item.kind, status);
   const existing = await repo.getTitle(item);
   if (existing) return { outcome: "existing", title: existing };
 
-  const title = await fetchTitle(item, status, options);
+  const title = await fetchTitle(item, "planToWatch", options);
+  let created: Title;
   try {
-    return { outcome: "added", title: await repo.createTitle(title) };
+    created = await repo.createTitle(title);
   } catch (error) {
     // Another add may have finished while we were fetching.
     const raced = error instanceof DuplicateTitleError && (await repo.getTitle(item));
     if (raced) return { outcome: "existing", title: raced };
     throw error;
   }
+  if (status === created.status) return { outcome: "added", title: created };
+  await watchLog.setStatus(item, status, undo);
+  return { outcome: "added", title: (await repo.getTitle(item)) ?? created };
 }
+
+/** Cmd/Ctrl-1 to 6 in the quick-add panel, as in the macOS QuickAddPanel (Swift's
+ * `ListStatus.manualCases`): Plan to Watch, Watching, Caught Up, On Hold, Dropped, Completed. */
+export const STATUS_SHORTCUTS: ListStatus[] = ["planToWatch", "watching", "caughtUp", "onHold", "dropped", "completed"];
+
+/** The status a Cmd/Ctrl-digit picks for a result of `kind`, or null when the key isn't a
+ * shortcut or that status isn't allowed for `kind` (Caught Up on a movie). */
+export function shortcutStatus(
+  e: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey">,
+  kind: Kind,
+): ListStatus | null {
+  if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || !/^[1-6]$/.test(e.key)) return null;
+  const status = STATUS_SHORTCUTS[Number(e.key) - 1];
+  return allowedStatuses(kind).includes(status) ? status : null;
+}
+
+export const titleHref = ({ kind, tmdbId }: TitleKey) => `/title/${kind}/${tmdbId}`;
+
+/** Picking a result that's already in the library opens its detail page instead of adding. */
+export const existingTitleHref = (item: TitleKey, inLibrary: ReadonlySet<string>) =>
+  inLibrary.has(itemId(item)) ? titleHref(item) : null;
 
 /** The next selected index after an arrow key, clamped to the list. -1 when empty. */
 export function moveSelection(current: number, delta: number, count: number): number {
