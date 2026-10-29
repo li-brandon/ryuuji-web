@@ -11,23 +11,26 @@ export type HistoryDay = { start: Date; items: HistoryItem[] };
 
 const time = (e: WatchEvent) => new Date(e.watchedAt).getTime();
 
-/** Entries newest first, grouped by day; events sharing a batch id within a day form one item. */
+/**
+ * Entries newest first, grouped by day; events sharing a batch id form one item. A batch that
+ * spans midnight stays whole under the day of its newest event.
+ */
 export function historyDays(entries: HistoryEntry[], calendar: Calendar = localCalendar()): HistoryDay[] {
   const sorted = [...entries].sort((a, b) => time(b.event) - time(a.event));
   const days: HistoryDay[] = [];
-  let batches = new Map<string, HistoryEntry[]>();
+  const batches = new Map<string, HistoryEntry[]>();
   for (const entry of sorted) {
+    const batchId = entry.event.batchId;
+    const existing = batchId ? batches.get(batchId) : undefined;
+    if (existing) {
+      existing.push(entry);
+      continue;
+    }
     const start = startOfDay(calendar, new Date(entry.event.watchedAt));
     let day = days.at(-1);
-    if (!day || day.start.getTime() !== start.getTime()) {
-      days.push((day = { start, items: [] }));
-      batches = new Map();
-    }
-    const batchId = entry.event.batchId;
+    if (!day || day.start.getTime() !== start.getTime()) days.push((day = { start, items: [] }));
     if (!batchId) {
       day.items.push({ kind: "single", entry });
-    } else if (batches.has(batchId)) {
-      batches.get(batchId)!.push(entry);
     } else {
       const batch: HistoryEntry[] = [entry];
       batches.set(batchId, batch);

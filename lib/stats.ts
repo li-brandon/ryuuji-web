@@ -212,6 +212,28 @@ export function scoreHistogram(scores: (number | null)[]): ScoreBin[] {
   return Array.from({ length: 10 }, (_, i) => ({ score: i + 1, count: counts.get(i + 1) ?? 0 }));
 }
 
+/**
+ * Titles per list status for a range: titles with at least one event on or after `start` and no
+ * later than `now`, or every title (watched or not) for all time.
+ */
+export function statusCounts(
+  titles: Pick<Title, "tmdbId" | "kind" | "status">[],
+  events: Pick<WatchEvent, "tmdbId" | "kind" | "watchedAt">[],
+  start: Date | null,
+  now: Date,
+): { status: ListStatus; count: number }[] {
+  if (start === null) return byStatus(titles.map((t) => t.status));
+  const watched = new Set(
+    events
+      .filter((e) => {
+        const at = new Date(e.watchedAt);
+        return at <= now && at >= start;
+      })
+      .map((e) => `${e.kind}:${e.tmdbId}`),
+  );
+  return byStatus(titles.filter((t) => watched.has(`${t.kind}:${t.tmdbId}`)).map((t) => t.status));
+}
+
 /** Titles per list status, in `LIST_STATUSES` order, omitting statuses no title has. */
 export function byStatus(statuses: ListStatus[]): { status: ListStatus; count: number }[] {
   return LIST_STATUSES.map((status) => ({ status, count: statuses.filter((s) => s === status).length })).filter((s) => s.count > 0);

@@ -27,6 +27,31 @@ describe("history", () => {
     expect(days[1].items).toHaveLength(1);
   });
 
+  it("keeps a bulk mark spanning midnight as one batch under the day of its newest event", () => {
+    const beforeMidnight = event(2, "2026-06-15T23:59:59.999Z", { batchId: "b", episode: 1 });
+    const afterMidnight = event(2, "2026-06-16T00:00:00.000Z", { batchId: "b", episode: 2, tmdbEpisodeId: 1002 });
+    const before = event(1, "2026-06-15T22:00:00Z");
+    const after = event(1, "2026-06-16T09:00:00Z");
+    const days = historyDays([beforeMidnight, before, afterMidnight, after].map(entry), calendar);
+
+    expect(days.map((d) => d.start.toISOString())).toEqual(["2026-06-16T00:00:00.000Z", "2026-06-15T00:00:00.000Z"]);
+    expect(days[0].items).toEqual([
+      { kind: "single", entry: entry(after) },
+      { kind: "batch", id: "b", entries: [entry(afterMidnight), entry(beforeMidnight)] },
+    ]);
+    expect(days[1].items).toEqual([{ kind: "single", entry: entry(before) }]);
+  });
+
+  it("numbers rewatches by season and episode when no episode id is stored", () => {
+    const ref = (episode: number, watchedAt: string, season = 1) => event(1, watchedAt, { season, episode, tmdbEpisodeId: null });
+    const first = ref(2, "2026-06-01T00:00:00Z");
+    const other = ref(3, "2026-06-02T00:00:00Z");
+    const otherSeason = ref(2, "2026-06-03T00:00:00Z", 2);
+    const again = ref(2, "2026-06-04T00:00:00Z");
+    const numbers = rewatchNumbers([again, otherSeason, other, first]);
+    expect([...numbers]).toEqual([[again.uid, 1]]);
+  });
+
   it("numbers rewatches per episode and title", () => {
     const first = event(1, "2026-06-01T00:00:00Z");
     const second = event(1, "2026-06-02T00:00:00Z", { season: null, episode: null });

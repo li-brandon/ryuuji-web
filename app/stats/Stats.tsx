@@ -13,7 +13,6 @@ import {
   byGenre,
   byKind,
   byOrigin,
-  byStatus,
   filterEvents,
   hours,
   rangeStart,
@@ -21,6 +20,7 @@ import {
   STATS_RANGE_LABELS,
   STATS_RANGES,
   statsTitle,
+  statusCounts,
   summary,
   watches,
   type BucketSize,
@@ -30,12 +30,12 @@ import {
   type StatsSlice,
 } from "@/lib/stats";
 import { libraryRepository } from "@/lib/storage";
-import type { ListStatus, Title } from "@/lib/types";
+import type { ListStatus, Title, WatchEvent } from "@/lib/types";
 import styles from "./stats.module.css";
 
 // Ports the macOS Views/Stats/StatsView (LIB-291) with plain CSS bar charts.
 
-type Loaded = { titles: Title[]; events: ReturnType<typeof allEvents>; now: Date; calendar: Calendar };
+type Loaded = { titles: Title[]; watchEvents: WatchEvent[]; events: ReturnType<typeof allEvents>; now: Date; calendar: Calendar };
 
 const BUCKET_LABELS: Record<BucketSize, string> = { week: "Week", month: "Month" };
 const number = new Intl.NumberFormat("en-US");
@@ -49,8 +49,9 @@ const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 async function load(): Promise<Loaded> {
   const repo = await libraryRepository();
   const titles = await repo.listTitles();
-  const inputs = await Promise.all(titles.map(async (title) => statsTitle(title, await repo.listWatchEvents(title))));
-  return { titles, events: allEvents(inputs), now: new Date(), calendar: localCalendar(firstWeekdayFor(navigator.language)) };
+  const perTitle = await Promise.all(titles.map((title) => repo.listWatchEvents(title)));
+  const inputs = titles.map((title, i) => statsTitle(title, perTitle[i]));
+  return { titles, watchEvents: perTitle.flat(), events: allEvents(inputs), now: new Date(), calendar: localCalendar(firstWeekdayFor(navigator.language)) };
 }
 
 export function Stats() {
@@ -116,7 +117,7 @@ export function Stats() {
             <Breakdown className={styles.wide} title="By Genre" slices={byGenre(events).slice(0, 12)} />
           </>
         )}
-        <StatusCounts statuses={data.titles.map((t) => t.status)} />
+        <StatusCounts counts={statusCounts(data.titles, data.watchEvents, start, now)} allTime={start === null} />
         <ScoreChart bins={scoreHistogram(data.titles.map((t) => t.score))} />
       </div>
     </>
@@ -245,8 +246,7 @@ function Breakdown({ title, slices, className }: { title: string; slices: StatsS
   );
 }
 
-function StatusCounts({ statuses }: { statuses: ListStatus[] }) {
-  const counts = byStatus(statuses);
+function StatusCounts({ counts, allTime }: { counts: { status: ListStatus; count: number }[]; allTime: boolean }) {
   const max = Math.max(...counts.map((c) => c.count), 0);
   return (
     <Section title="By List Status">
@@ -259,7 +259,8 @@ function StatusCounts({ statuses }: { statuses: ListStatus[] }) {
           </li>
         ))}
       </ul>
-      <p className={styles.note}>All titles in your library, regardless of date range.</p>
+      {counts.length === 0 && <p>No titles watched in this range.</p>}
+      <p className={styles.note}>{allTime ? "All titles in your library." : "Titles watched in this range."}</p>
     </Section>
   );
 }

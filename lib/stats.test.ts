@@ -14,6 +14,7 @@ import {
   rangeStart,
   scoreHistogram,
   statsTitle,
+  statusCounts,
   summary,
   titleEvents,
   watches,
@@ -228,5 +229,126 @@ describe("scores", () => {
     expect(bins.find((b) => b.score === 10)?.count).toBe(1);
     expect(bins.find((b) => b.score === 3)?.count).toBe(1);
     expect(bins.reduce((sum, b) => sum + b.count, 0)).toBe(4);
+  });
+
+  it("ignores scores outside one to ten and non-integer scores", () => {
+    const bins = scoreHistogram([0, 11, -1, -7, 7.5, 0.5, 10.5, Number.NaN, Number.POSITIVE_INFINITY, null, 1, 7, 10]);
+    expect(bins.reduce((sum, b) => sum + b.count, 0)).toBe(3);
+    expect(bins.filter((b) => b.count > 0).map((b) => b.score)).toEqual([1, 7, 10]);
+  });
+});
+
+describe("range boundaries", () => {
+  it("includes an event exactly at the range start and excludes one a millisecond earlier", () => {
+    const now = date(2026, 6, 15, 18);
+    const start = rangeStart("fourWeeks", now, calendar)!;
+    const atStart = event({ watchedAt: start });
+    const before = event({ watchedAt: new Date(start.getTime() - 1) });
+    const atNow = event({ watchedAt: now });
+    const after = event({ watchedAt: new Date(now.getTime() + 1) });
+    expect(filterEvents([before, atStart, atNow, after], start, now)).toEqual([atStart, atNow]);
+  });
+});
+
+describe("rewatches without episode ids", () => {
+  it("matches events by season and episode when no id is stored", () => {
+    const ref = (season: number, episode: number, day: number) => ({ season, episode, tmdbEpisodeId: null, watchedAt: date(2026, 3, day) });
+    const title = show([], [ref(1, 2, 4), ref(1, 3, 2), ref(2, 2, 3), ref(1, 2, 1), ref(2, 1, 5)]);
+    expect(titleEvents(title).map((e) => [e.watchedAt.getUTCDate(), e.isRewatch])).toEqual([
+      [1, false],
+      [2, false],
+      [3, false],
+      [4, true],
+      [5, false],
+    ]);
+  });
+});
+
+describe("buckets at the end of the range", () => {
+  it("keeps the current week even when nothing was watched in it", () => {
+    // 2026-06-01, -08 and -15 are Mondays.
+    const events = [event({ watchedAt: date(2026, 6, 2) })];
+    const result = buckets(events, "week", date(2026, 6, 1, 0), date(2026, 6, 17), calendar);
+    expect(result.map((b) => b.start)).toEqual([date(2026, 6, 1, 0), date(2026, 6, 8, 0), date(2026, 6, 15, 0)]);
+    expect(result.map(watches)).toEqual([1, 0, 0]);
+  });
+
+  it("starts a new current bucket the instant a week or month begins", () => {
+    const events = [event({ watchedAt: date(2026, 6, 2) })];
+    const week = buckets(events, "week", date(2026, 6, 1, 0), date(2026, 6, 15, 0), calendar);
+    expect(week).toHaveLength(3);
+    expect(week.at(-1)).toEqual({ start: date(2026, 6, 15, 0), firstWatches: 0, rewatches: 0, minutes: 0 });
+
+    const month = buckets(events, "month", null, date(2026, 8, 1, 0), calendar);
+    expect(month.map((b) => b.start)).toEqual([date(2026, 6, 1, 0), date(2026, 7, 1, 0), date(2026, 8, 1, 0)]);
+    expect(month.map(watches)).toEqual([1, 0, 0]);
+  });
+});
+
+describe("genre order", () => {
+  it("puts the most watched genre first, counting rewatches", () => {
+    const events = [
+      event({ watchedAt: date(2026, 1, 1), genres: ["Comedy"] }),
+      event({ watchedAt: date(2026, 1, 1), genres: ["Action"] }),
+      event({ watchedAt: date(2026, 1, 1), genres: ["Drama"] }),
+      event({ watchedAt: date(2026, 1, 2), genres: ["Drama"], isRewatch: true }),
+    ];
+    expect(byGenre(events).map((s) => [s.label, watches(s)])).toEqual([
+      ["Drama", 2],
+      ["Action", 1],
+      ["Comedy", 1],
+    ]);
+  });
+
+  it("breaks ties by label ascending regardless of input order", () => {
+    const events = ["Mystery", "Action", "Unknown", "Comedy"].map((genre) =>
+      event({ watchedAt: date(2026, 1, 1), genres: genre === "Unknown" ? [] : [genre] }),
+    );
+    expect(byGenre(events).map((s) => s.label)).toEqual(["Action", "Comedy", "Mystery", "Unknown"]);
+    expect(byGenre([...events].reverse()).map((s) => s.label)).toEqual(["Action", "Comedy", "Mystery", "Unknown"]);
+  });
+});
+
+describe("status counts by range", () => {
+  const now = date(2026, 6, 15, 18);
+  const start = rangeStart("fourWeeks", now, calendar)!;
+  const titles: Pick<Title, "tmdbId" | "kind" | "status">[] = [
+    { tmdbId: 1, kind: "show", status: "watching" },
+    { tmdbId: 2, kind: "show", status: "completed" },
+    { tmdbId: 3, kind: "movie", status: "completed" },
+    { tmdbId: 4, kind: "movie", status: "planToWatch" },
+    { tmdbId: 5, kind: "show", status: "onHold" },
+    { tmdbId: 1, kind: "movie", status: "completed" },
+  ];
+  const watched = (tmdbId: number, kind: Kind, at: Date) => ({ tmdbId, kind, watchedAt: at.toISOString() });
+  const events = [
+    watched(1, "show", date(2026, 6, 10)),
+    watched(1, "show", date(2026, 6, 12)),
+    watched(2, "show", start),
+    watched(3, "movie", new Date(start.getTime() - 1)),
+    watched(5, "show", new Date(now.getTime() + 1)),
+  ];
+  const total = (counts: { count: number }[]) => counts.reduce((sum, c) => sum + c.count, 0);
+
+  it("counts only titles watched in the range, once each, with an inclusive start", () => {
+    expect(statusCounts(titles, events, start, now)).toEqual([
+      { status: "watching", count: 1 },
+      { status: "completed", count: 1 },
+    ]);
+  });
+
+  it("counts every title in the library for all time, watched or not", () => {
+    expect(statusCounts(titles, events, null, now)).toEqual([
+      { status: "planToWatch", count: 1 },
+      { status: "watching", count: 1 },
+      { status: "onHold", count: 1 },
+      { status: "completed", count: 3 },
+    ]);
+  });
+
+  it("changes with the range", () => {
+    expect(total(statusCounts(titles, events, start, now))).toBe(2);
+    expect(total(statusCounts(titles, events, rangeStart("twelveMonths", now, calendar), now))).toBe(3);
+    expect(total(statusCounts(titles, events, rangeStart("allTime", now, calendar), now))).toBe(6);
   });
 });

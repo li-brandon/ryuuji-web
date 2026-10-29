@@ -174,11 +174,19 @@ try {
 
       await range.getByRole("radio", { name: "Last 4 Weeks" }).locator("xpath=ancestor::label").click();
       assert(await range.getByRole("radio", { name: "Last 4 Weeks" }).isChecked());
+      // By List Status follows the range: only titles watched in it, every title for All Time.
+      const statuses = page.getByRole("region", { name: "By List Status" });
+      await statuses.getByText("Titles watched in this range.").waitFor();
+      assert.equal(await statuses.getByRole("listitem").count(), 2, "4 weeks: Watching and Completed");
+      assert.match(await statuses.getByRole("listitem").filter({ hasText: "Completed" }).innerText(), /\b3\b/);
       await shot(page, `stats-4w-week-${tag}`);
       await range.getByRole("radio", { name: "Last 12 Months" }).locator("xpath=ancestor::label").click();
       await page.getByRole("group", { name: "Group charts by" }).getByText("Month", { exact: true }).click();
       await shot(page, `stats-12m-month-${tag}`);
       await range.getByText("All Time", { exact: true }).click();
+      await statuses.getByText("All titles in your library.").waitFor();
+      assert.equal(await statuses.getByRole("listitem").count(), 4, "all time: every status in the library");
+      assert.match(await statuses.getByRole("listitem").filter({ hasText: "Completed" }).innerText(), /\b4\b/);
       await shot(page, `stats-all-month-${tag}`);
       await page.close();
     }
