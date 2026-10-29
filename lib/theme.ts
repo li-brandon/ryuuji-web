@@ -21,3 +21,13 @@ export function applyTheme(preference: ThemePreference, root: HTMLElement = docu
   if (preference === "system") delete root.dataset.theme;
   else root.dataset.theme = preference;
 }
+
+export const THEME_CHANGE = "ryuuji-theme-change";
+export function readTheme(): ThemePreference {
+  try { return parseTheme(localStorage.getItem(THEME_STORAGE_KEY)); } catch { return "system"; }
+}
+export function setTheme(preference: ThemePreference) {
+  try { localStorage.setItem(THEME_STORAGE_KEY, preference); } catch { /* Session only. */ }
+  applyTheme(preference);
+  window.dispatchEvent(new Event(THEME_CHANGE));
+}

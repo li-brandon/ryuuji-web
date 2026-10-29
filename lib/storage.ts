@@ -1,3 +1,8 @@
+import { setTheme } from "./theme";
+import { saveWatchPreferences } from "./watch-preferences";
+import { planLibraryImport, readLibraryFile, type ImportPlan } from "./library-import";
+import { withWatchLogLock } from "./watch-log-lock";
+import { notifyLibraryChanged } from "./library-changes";
 import { remapEvents, titleEpisodes } from "./progress";
 import { statusAfterRefresh } from "./status-engine";
 import { openDB, type DBSchema, type IDBPTransaction, type IDBPDatabase } from "idb";
@@ -68,6 +73,31 @@ export class LibraryRepository {
       throw error;
     });
     return value;
+  }
+
+  async librarySnapshot(): Promise<{ titles: Title[]; events: WatchEvent[] }> {
+    const tx = this.db.transaction(["titles", "watchEvents"], "readonly");
+    const [titles, events] = await Promise.all([tx.objectStore("titles").getAll(), tx.objectStore("watchEvents").getAll()]);
+    await tx.done;
+    return { titles, events };
+  }
+
+  async importLibrary(plan: Pick<ImportPlan, "file">): Promise<ImportPlan> {
+    const file = readLibraryFile(plan.file);
+    return withWatchLogLock(async () => {
+      const result = await this.write(async (tx) => {
+        const titles = tx.objectStore("titles");
+        const events = tx.objectStore("watchEvents");
+        const current = planLibraryImport(file, await titles.getAll(), await events.getAll());
+        for (const title of current.titles) await titles.put(titleSchema.parse(title));
+        for (const event of current.events) await events.add(watchEventSchema.parse(event));
+        return current;
+      });
+      if (file.settings?.theme !== undefined) setTheme(file.settings.theme);
+      if (file.settings?.watch !== undefined) saveWatchPreferences(file.settings.watch);
+      if (result.titles.length || result.events.length) notifyLibraryChanged();
+      return result;
+    });
   }
 
   async createTitle(title: Title): Promise<Title> {

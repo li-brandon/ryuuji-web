@@ -80,3 +80,19 @@ it("rejects duplicate event uids within a title", () => {
   input.titles[0].watchEvents.push(structuredClone(input.titles[0].watchEvents[0]));
   expect(() => parseLibraryFile(input)).toThrow("Duplicate event uid");
 });
+
+it("accepts optional strict non-secret settings and older files without settings", () => {
+  const without = structuredClone(example);
+  delete without.settings;
+  expect(parseLibraryFile(without).settings).toBeUndefined();
+  expect(parseLibraryFile({ ...without, settings: { theme: "dark", watch: { region: "JP", services: [8] } } }).settings)
+    .toEqual({ theme: "dark", watch: { region: "JP", services: [8] } });
+  expect(parseLibraryFile({ ...without, settings: {} }).settings).toEqual({});
+});
+
+it.each([
+  { token: "secret" }, { theme: "other" }, { watch: { region: "us", services: [] } },
+  { watch: { region: "US", services: [-1] } }, { watch: { region: "US", services: [], credentials: "secret" } },
+])("rejects invalid settings %j", (settings) => {
+  expect(() => parseLibraryFile({ ...example, settings })).toThrow();
+});

@@ -16,3 +16,14 @@ export function useLibraryChanges(reload: () => Promise<unknown>) {
     };
   }, [reload]);
 }
+
+/** Notification errors must not turn a committed import into a reported failure. */
+export function notifyLibraryChanged() {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(LIBRARY_CHANGED));
+  if (typeof BroadcastChannel !== "undefined") {
+    try {
+      const channel = new BroadcastChannel(LIBRARY_CHANGED);
+      try { channel.postMessage("changed"); } finally { channel.close(); }
+    } catch { /* Data has already committed. */ }
+  }
+}

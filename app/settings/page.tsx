@@ -1,3 +1,4 @@
+import { LibraryBackup } from "@/components/LibraryBackup";
 import { MetadataSettings } from "@/components/MetadataRefresh";
 import { WatchProviderSettings } from "@/components/WatchProviderSettings";
 import Link from "next/link";
@@ -17,6 +18,7 @@ export default function SettingsPage() {
           <p>System follows your device’s light or dark setting. Your choice is saved on this device.</p>
           <ThemeToggle />
         </section>
+        <LibraryBackup />
         <MetadataSettings />
         <WatchProviderSettings />
         <section className="section">

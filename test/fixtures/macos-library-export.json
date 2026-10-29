@@ -1,0 +1,174 @@
+{
+  "exportedAt": "2026-10-28T09:30:00Z",
+  "format": "ryuuji-library",
+  "schemaVersion": 1,
+  "titles": [
+    {
+      "addedAt": "2026-10-20T08:00:00Z",
+      "episodes": null,
+      "genres": [
+        "Animation",
+        "Family",
+        "Fantasy"
+      ],
+      "isAnime": true,
+      "kind": "movie",
+      "lastRefreshedAt": null,
+      "metadataRevision": 0,
+      "name": "Spirited Away",
+      "notes": "Rewatch with subs.",
+      "originCountries": [
+        "JP"
+      ],
+      "originalLanguage": "ja",
+      "originalName": "千と千尋の神隠し",
+      "overview": "",
+      "posterPath": null,
+      "providerData": null,
+      "releaseDate": "2001-07-20",
+      "runtime": 125,
+      "score": 10,
+      "showStatus": null,
+      "status": "completed",
+      "tmdbId": 129,
+      "watchEvents": [
+        {
+          "batchId": null,
+          "episode": null,
+          "season": null,
+          "tmdbEpisodeId": null,
+          "uid": "9b2e6f1a-4c3d-4e5f-8a7b-1c2d3e4f5a6b",
+          "watchedAt": "2026-10-21T02:10:00Z"
+        }
+      ]
+    },
+    {
+      "addedAt": "2026-10-01T20:15:00Z",
+      "episodes": {
+        "schemaVersion": 1,
+        "seasons": [
+          {
+            "episodes": [
+              {
+                "airDate": "2008-01-20",
+                "name": "Pilot",
+                "number": 1,
+                "runtime": 58,
+                "season": 1,
+                "tmdbId": 62085
+              },
+              {
+                "airDate": "2008-01-27",
+                "name": "Cat's in the Bag...",
+                "number": 2,
+                "runtime": 48,
+                "season": 1,
+                "tmdbId": 62086
+              },
+              {
+                "airDate": "2008-02-10",
+                "name": "...And the Bag's in the River",
+                "number": 3,
+                "runtime": null,
+                "season": 1,
+                "tmdbId": 62087
+              }
+            ],
+            "name": "Season 1",
+            "number": 1
+          }
+        ]
+      },
+      "genres": [
+        "Drama",
+        "Crime"
+      ],
+      "isAnime": false,
+      "kind": "show",
+      "lastRefreshedAt": "2026-10-27T18:00:00Z",
+      "metadataRevision": 4,
+      "name": "Breaking Bad",
+      "notes": "",
+      "originCountries": [
+        "US"
+      ],
+      "originalLanguage": "en",
+      "originalName": "Breaking Bad",
+      "overview": "A chemistry teacher turns to cooking meth.",
+      "posterPath": "/ggFHVNu6YYI5L9pCfOacjizRGt.jpg",
+      "providerData": {
+        "buy": [],
+        "fetchedAt": "2026-10-27T18:00:00Z",
+        "link": "https://www.themoviedb.org/tv/1396/watch?locale=US",
+        "providers": [
+          {
+            "displayPriority": 1,
+            "id": 8,
+            "logoPath": "/netflix.jpg",
+            "name": "Netflix"
+          },
+          {
+            "displayPriority": 2,
+            "id": 1899,
+            "logoPath": null,
+            "name": "Max"
+          }
+        ],
+        "region": "US",
+        "rent": []
+      },
+      "releaseDate": "2008-01-20",
+      "runtime": null,
+      "score": null,
+      "showStatus": "Ended",
+      "status": "watching",
+      "tmdbId": 1396,
+      "watchEvents": [
+        {
+          "batchId": "7d4e2b1c-0a9f-4e8d-b7c6-5a4b3c2d1e0f",
+          "episode": 1,
+          "season": 1,
+          "tmdbEpisodeId": 62085,
+          "uid": "3f1c2a9e-8b7d-4c6e-9a51-2d0f4e6b7c81",
+          "watchedAt": "2026-10-02T21:00:00Z"
+        },
+        {
+          "batchId": "7d4e2b1c-0a9f-4e8d-b7c6-5a4b3c2d1e0f",
+          "episode": 2,
+          "season": 1,
+          "tmdbEpisodeId": 62086,
+          "uid": "5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
+          "watchedAt": "2026-10-02T21:00:00Z"
+        }
+      ]
+    },
+    {
+      "addedAt": "2026-10-25T12:00:00Z",
+      "episodes": null,
+      "genres": [
+        "Animation"
+      ],
+      "isAnime": true,
+      "kind": "show",
+      "lastRefreshedAt": null,
+      "metadataRevision": 1,
+      "name": "One Piece",
+      "notes": "",
+      "originCountries": [
+        "JP"
+      ],
+      "originalLanguage": "ja",
+      "originalName": "ワンピース",
+      "overview": "",
+      "posterPath": null,
+      "providerData": null,
+      "releaseDate": "1999-10-20",
+      "runtime": null,
+      "score": null,
+      "showStatus": "Returning Series",
+      "status": "planToWatch",
+      "tmdbId": 37854,
+      "watchEvents": []
+    }
+  ]
+}

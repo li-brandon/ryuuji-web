@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { THEMES } from "./theme";
+import { preferencesSchema } from "./watch-providers";
 import { titleSchema, watchEventFieldsSchema } from "./types";
 
 // Versioned JSON interchange format; see docs/library-schema.md.
@@ -6,10 +8,17 @@ import { titleSchema, watchEventFieldsSchema } from "./types";
 export const LIBRARY_FORMAT = "ryuuji-library";
 export const LIBRARY_SCHEMA_VERSION = 1;
 
+export const librarySettingsSchema = z.strictObject({
+  theme: z.enum(THEMES).optional(),
+  watch: preferencesSchema.strict().optional(),
+});
+export type LibrarySettings = z.infer<typeof librarySettingsSchema>;
+
 export const libraryFileSchema = z.strictObject({
   format: z.literal(LIBRARY_FORMAT),
   schemaVersion: z.literal(LIBRARY_SCHEMA_VERSION),
   exportedAt: z.iso.datetime({ offset: true }),
+  settings: librarySettingsSchema.optional(),
   titles: z.array(titleSchema.extend({ watchEvents: z.array(watchEventFieldsSchema) })),
 }).superRefine((file, ctx) => {
   const titles = new Set<string>();
