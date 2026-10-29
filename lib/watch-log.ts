@@ -155,7 +155,9 @@ export class WatchLogService {
     });
   }
 
-  /** Deletes a single event, e.g. from History. */
+  /** Deletes a single event, e.g. from History (LIB-416): one "Delete Watch" undo step that restores
+   * the event and the previous status. Status is recomputed like an unmark, so a Completed or
+   * Caught Up show with an episode left becomes Watching and an unwatched movie Plan to Watch. */
   deleteEvent(uid: string, undo?: UndoStack): Promise<void> {
     return this.run(async () => {
       const event = await this.repo.getWatchEvent(uid);
