@@ -31,6 +31,34 @@ describe("Library selection", () => {
     expect(selectLibrary(entries.map((entry) => ({ ...entry, events: [] })), filters()).visible.map(({ title }) => title.name)).toEqual(["Alpha", "Beta"]);
     expect(filters({ kind: "bad", status: "bad", sort: "bad", anime: "bad" })).toEqual({ kind: "all", status: "all", sort: "watched", anime: "0" });
   });
+  it("counts statuses after the kind and anime filters but before the status filter", () => {
+    const anime = selectLibrary(entries, filters({ anime: "1", status: "planToWatch" }));
+    expect(anime.total).toBe(1);
+    expect(anime.counts).toMatchObject({ watching: 1, planToWatch: 0 });
+    expect(anime.visible).toEqual([]);
+    const movies = selectLibrary(entries, filters({ kind: "movie" }));
+    expect(movies.total).toBe(1);
+    expect(movies.counts).toMatchObject({ watching: 0, planToWatch: 1 });
+  });
+  it("breaks name ties by kind, then id", () => {
+    const show = (tmdbId: number) => ({ title: { ...a, name: "Same", tmdbId }, events: [] });
+    const movie = { title: { ...b, name: "Same", tmdbId: 1 }, events: [] };
+    expect(selectLibrary([show(9), show(3), movie], filters({ sort: "name" })).visible).toEqual([movie, show(3), show(9)]);
+  });
+  it("sorts names case-insensitively", () => {
+    const names = ["beta", "Alpha", "Charlie", "alpha2"].map((name, i) => ({ title: { ...b, name, tmdbId: 100 + i }, events: [] }));
+    expect(selectLibrary(names, filters({ sort: "name" })).visible.map(({ title }) => title.name)).toEqual(["Alpha", "alpha2", "beta", "Charlie"]);
+  });
+  it("sorts unscored titles after every scored one, including a score of 0", () => {
+    const scored = (name: string, score: number | null) => ({ title: { ...b, name, score, tmdbId: name.charCodeAt(0) }, events: [] });
+    const list = [scored("Ada", null), scored("Bob", 0), scored("Cy", null), scored("Di", 5)];
+    expect(selectLibrary(list, filters({ sort: "score" })).visible.map(({ title }) => title.name)).toEqual(["Di", "Bob", "Ada", "Cy"]);
+  });
+  it("breaks equal scores by name, then kind and id", () => {
+    const scored = (name: string, kind: "movie" | "show", tmdbId: number) => ({ title: { ...(kind === "show" ? a : b), name, score: 7, tmdbId }, events: [] });
+    const list = [scored("Zed", "movie", 1), scored("Mid", "show", 2), scored("Mid", "movie", 5), scored("Mid", "movie", 3)];
+    expect(selectLibrary(list, filters({ sort: "score" })).visible.map(({ title }) => `${title.name}-${title.kind}-${title.tmdbId}`)).toEqual(["Mid-movie-3", "Mid-movie-5", "Mid-show-2", "Zed-movie-1"]);
+  });
   it("removal cascades watch events and preserves the other kind with the same id", async () => {
     const db = await openLibraryDB("library-removal");
     try {
