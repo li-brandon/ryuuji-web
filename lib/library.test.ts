@@ -6,7 +6,7 @@ import { LibraryRepository, openLibraryDB } from "./storage";
 
 const a = { ...F.show(F.season(1, 2), "watching"), name: "Alpha", isAnime: true, score: 8, addedAt: "2026-01-01T00:00:00Z" };
 const b = { ...F.movie(), name: "Beta", isAnime: false, score: 10, addedAt: "2026-02-01T00:00:00Z" };
-const entries = [{ title: b, events: [] }, { title: a, events: [{ ...F.event(F.episode(1, 1)), tmdbId: a.tmdbId, kind: a.kind, uid: "watch", batchId: null, watchedAt: "2026-03-01T00:00:00Z" }] }];
+const entries = [{ title: b, events: [] }, { title: a, events: [{ ...F.event(F.episode(1, 1)), tmdbId: a.tmdbId, kind: a.kind, uid: "00000000-0000-4000-8000-000000000001", batchId: null, watchedAt: "2026-03-01T00:00:00Z" }] }];
 const filters = (changes = {}) => libraryFiltersSchema.parse({ ...changes });
 describe("Library selection", () => {
   it("groups by status and counts before status filtering", () => {
@@ -67,7 +67,7 @@ describe("Library selection", () => {
       const other = { ...b, tmdbId: a.tmdbId };
       await repo.createTitle(other);
       await repo.addWatchEvent(entries[1].events[0]);
-      await repo.addWatchEvent({ ...entries[1].events[0], uid: "other", kind: "movie" });
+      await repo.addWatchEvent({ ...entries[1].events[0], uid: "00000000-0000-4000-8000-000000000002", kind: "movie" });
       await repo.deleteTitle(a);
       expect(await repo.getTitle(a)).toBeUndefined();
       expect(await repo.getWatchEvent("watch")).toBeUndefined();

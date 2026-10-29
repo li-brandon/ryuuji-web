@@ -1,6 +1,7 @@
 import { remapEvents, titleEpisodes } from "./progress";
 import { statusAfterRefresh } from "./status-engine";
-import { openDB, type DBSchema, type IDBPDatabase } from "idb";
+import { openDB, type DBSchema, type IDBPTransaction, type IDBPDatabase } from "idb";
+import { titleSchema, watchEventSchema } from "./types";
 import type { Kind, ListStatus, Title, TitleKey, WatchEvent } from "./types";
 
 // Local-only IndexedDB storage for the library.
@@ -30,7 +31,10 @@ export class TitleNotFoundError extends Error {
 const keyOf = ({ tmdbId, kind }: TitleKey): [number, Kind] => [tmdbId, kind];
 
 export function openLibraryDB(name = DB_NAME): Promise<IDBPDatabase<RyuujiDB>> {
-  return openDB<RyuujiDB>(name, DB_VERSION, {
+  const connection = openDB<RyuujiDB>(name, DB_VERSION, {
+    blocking() {
+      void connection.then((db) => db.close());
+    },
     upgrade(db, oldVersion) {
       // Add a `case` per version bump; each step migrates from the previous version.
       if (oldVersion < 1) {
@@ -39,22 +43,41 @@ export function openLibraryDB(name = DB_NAME): Promise<IDBPDatabase<RyuujiDB>> {
       }
     },
   });
+  return connection;
 }
 
 /** Titles and their watch events. One title per TMDB id + kind, like the macOS TitleRepository. */
 export class LibraryRepository {
   constructor(private readonly db: IDBPDatabase<RyuujiDB>) {}
 
+  /** Observe request and transaction failures together, including failures before the final write. */
+  private async write<T>(operation: (tx: IDBPTransaction<RyuujiDB, ["titles", "watchEvents"], "readwrite">) => Promise<T>): Promise<T> {
+    const tx = this.db.transaction(["titles", "watchEvents"], "readwrite");
+    const result = (async () => {
+      try {
+        return await operation(tx);
+      } catch (error) {
+        // Validation or a synchronous request error must roll back earlier requests too.
+        try { tx.abort(); } catch { /* The transaction may already have aborted. */ }
+        throw error;
+      }
+    })();
+    const [value] = await Promise.all([result, tx.done]).catch(async (error: unknown) => {
+      // Prefer the request/validation error over the transaction's generic AbortError.
+      await result;
+      throw error;
+    });
+    return value;
+  }
+
   async createTitle(title: Title): Promise<Title> {
-    const tx = this.db.transaction("titles", "readwrite");
-    if (await tx.store.getKey(keyOf(title))) {
-      tx.abort();
-      await tx.done.catch(() => {});
-      throw new DuplicateTitleError(title);
-    }
-    await tx.store.add(title);
-    await tx.done;
-    return title;
+    const validated = titleSchema.parse(title);
+    return this.write(async (tx) => {
+      const store = tx.objectStore("titles");
+      if (await store.getKey(keyOf(validated))) throw new DuplicateTitleError(validated);
+      await store.add(validated);
+      return validated;
+    });
   }
 
   getTitle(key: TitleKey): Promise<Title | undefined> {
@@ -67,17 +90,16 @@ export class LibraryRepository {
 
   /** Applies `changes` to an existing title. The key fields can't change. */
   async updateTitle(key: TitleKey, changes: Partial<Omit<Title, "tmdbId" | "kind">>): Promise<Title> {
-    const tx = this.db.transaction("titles", "readwrite");
-    const existing = await tx.store.get(keyOf(key));
-    if (!existing) {
-      tx.abort();
-      await tx.done.catch(() => {});
-      throw new TitleNotFoundError(key);
-    }
-    const updated = { ...existing, ...changes, tmdbId: existing.tmdbId, kind: existing.kind };
-    await tx.store.put(updated);
-    await tx.done;
-    return updated;
+    return this.write(async (tx) => {
+      const existing = await tx.objectStore("titles").get(keyOf(key));
+      if (!existing) {
+        throw new TitleNotFoundError(key);
+      }
+      const defined = Object.fromEntries(Object.entries(changes).filter(([, value]) => value !== undefined));
+      const updated = titleSchema.parse({ ...existing, ...defined, tmdbId: existing.tmdbId, kind: existing.kind });
+      await tx.objectStore("titles").put(updated);
+      return updated;
+    });
   }
 
   /** Saves metadata, remaps history, and derives status from the latest state in one transaction. */
@@ -89,52 +111,49 @@ export class LibraryRepository {
     >>,
     today: string,
   ): Promise<Title> {
-    const tx = this.db.transaction(["titles", "watchEvents"], "readwrite");
-    const titles = tx.objectStore("titles");
-    const existing = await titles.get(keyOf(key));
-    if (!existing) {
-      tx.abort();
-      await tx.done.catch(() => {});
-      throw new TitleNotFoundError(key);
-    }
-    const updated = { ...existing, ...metadata, metadataRevision: existing.metadataRevision + 1 };
-    const store = tx.objectStore("watchEvents");
-    const originals = await store.index("byTitle").getAll(keyOf(key));
-    const events = remapEvents(originals, titleEpisodes(updated));
-    for (const [index, event] of events.entries()) {
-      const original = originals[index];
-      // Remapping preserves order and only changes these episode identity fields.
-      if (event.season !== original.season || event.episode !== original.episode ||
-          event.tmdbEpisodeId !== original.tmdbEpisodeId) {
-        await store.put(event);
+    return this.write(async (tx) => {
+      const titles = tx.objectStore("titles");
+      const existing = await titles.get(keyOf(key));
+      if (!existing) {
+        throw new TitleNotFoundError(key);
       }
-    }
-    updated.status = statusAfterRefresh(updated, events, today);
-    await titles.put(updated);
-    await tx.done;
-    return updated;
+      const updated = titleSchema.parse({ ...existing, ...metadata, metadataRevision: existing.metadataRevision + 1 });
+      const store = tx.objectStore("watchEvents");
+      const originals = await store.index("byTitle").getAll(keyOf(key));
+      const events = remapEvents(originals, titleEpisodes(updated));
+      for (const [index, event] of events.entries()) {
+        const original = originals[index];
+        // Remapping preserves order and only changes these episode identity fields.
+        if (event.season !== original.season || event.episode !== original.episode ||
+            event.tmdbEpisodeId !== original.tmdbEpisodeId) {
+          await store.put(watchEventSchema.parse(event));
+        }
+      }
+      updated.status = statusAfterRefresh(updated, events, today);
+      await titles.put(updated);
+      return updated;
+    });
   }
 
   /** Deletes the title and all its watch events in one transaction. */
   async deleteTitle(key: TitleKey): Promise<void> {
-    const tx = this.db.transaction(["titles", "watchEvents"], "readwrite");
-    const events = tx.objectStore("watchEvents");
-    for (const uid of await events.index("byTitle").getAllKeys(keyOf(key))) {
-      await events.delete(uid);
-    }
-    await tx.objectStore("titles").delete(keyOf(key));
-    await tx.done;
+    return this.write(async (tx) => {
+      const events = tx.objectStore("watchEvents");
+      for (const uid of await events.index("byTitle").getAllKeys(keyOf(key))) {
+        await events.delete(uid);
+      }
+      await tx.objectStore("titles").delete(keyOf(key));
+    });
   }
 
   async addWatchEvent(event: WatchEvent): Promise<void> {
-    const tx = this.db.transaction(["titles", "watchEvents"], "readwrite");
-    if (!(await tx.objectStore("titles").getKey(keyOf(event)))) {
-      tx.abort();
-      await tx.done.catch(() => {});
-      throw new TitleNotFoundError(event);
-    }
-    await tx.objectStore("watchEvents").add(event);
-    await tx.done;
+    event = watchEventSchema.parse(event);
+    return this.write(async (tx) => {
+      if (!(await tx.objectStore("titles").getKey(keyOf(event)))) {
+        throw new TitleNotFoundError(event);
+      }
+      await tx.objectStore("watchEvents").add(event);
+    });
   }
 
   listWatchEvents(key: TitleKey): Promise<WatchEvent[]> {
@@ -153,21 +172,20 @@ export class LibraryRepository {
     key: TitleKey,
     change: { add: WatchEvent[]; remove: string[]; status: ListStatus },
   ): Promise<Title> {
-    const tx = this.db.transaction(["titles", "watchEvents"], "readwrite");
-    const titles = tx.objectStore("titles");
-    const existing = await titles.get(keyOf(key));
-    if (!existing) {
-      tx.abort();
-      await tx.done.catch(() => {});
-      throw new TitleNotFoundError(key);
-    }
-    const events = tx.objectStore("watchEvents");
-    for (const uid of change.remove) await events.delete(uid);
-    for (const event of change.add) await events.put(event);
-    const updated = { ...existing, status: change.status };
-    await titles.put(updated);
-    await tx.done;
-    return updated;
+    return this.write(async (tx) => {
+      const titles = tx.objectStore("titles");
+      const existing = await titles.get(keyOf(key));
+      if (!existing) {
+        throw new TitleNotFoundError(key);
+      }
+      const events = tx.objectStore("watchEvents");
+      const validated = change.add.map((event) => watchEventSchema.parse(event));
+      const updated = titleSchema.parse({ ...existing, status: change.status });
+      for (const uid of change.remove) await events.delete(uid);
+      for (const event of validated) await events.put(event);
+      await titles.put(updated);
+      return updated;
+    });
   }
 }
 

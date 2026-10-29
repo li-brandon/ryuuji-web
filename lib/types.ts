@@ -30,14 +30,14 @@ export const kindSchema = z.enum(KINDS);
 export const listStatusSchema = z.enum(LIST_STATUSES);
 export const showStatusSchema = z.enum(SHOW_STATUSES);
 
-export const episodeMetadataSchema = z.object({
+export const episodeMetadataSchema = z.strictObject({
   schemaVersion: z.literal(1),
   seasons: z.array(
-    z.object({
+    z.strictObject({
       number: z.int(),
       name: z.string(),
       episodes: z.array(
-        z.object({
+        z.strictObject({
           tmdbId: z.int(),
           season: z.int(),
           number: z.int(),
@@ -50,14 +50,14 @@ export const episodeMetadataSchema = z.object({
   ),
 });
 
-export const providerInfoSchema = z.object({
+export const providerInfoSchema = z.strictObject({
   id: z.int(),
   name: z.string(),
   logoPath: opt(z.string()),
   displayPriority: z.int(),
 });
 
-export const watchProviderDataSchema = z.object({
+export const watchProviderDataSchema = z.strictObject({
   region: z.string(),
   fetchedAt: isoDateTime,
   /** Subscription streaming only; used for My services badges. */
@@ -68,7 +68,7 @@ export const watchProviderDataSchema = z.object({
 });
 export type ProviderInfo = z.infer<typeof providerInfoSchema>;
 
-export const titleSchema = z.object({
+export const titleSchema = z.strictObject({
   tmdbId: z.int(),
   kind: kindSchema,
   name: z.string(),
@@ -95,7 +95,7 @@ export const titleSchema = z.object({
 });
 
 /** A watch event without its title key, as nested under a title in the interchange file. */
-export const watchEventFieldsSchema = z.object({
+export const watchEventFieldsSchema = z.strictObject({
   uid: z.uuid(),
   watchedAt: isoDateTime,
   season: opt(z.int()),
@@ -113,3 +113,9 @@ export type Title = z.infer<typeof titleSchema>;
 export type TitleKey = Pick<Title, "tmdbId" | "kind">;
 /** One recorded watch; `tmdbId` + `kind` key it to its title. */
 export type WatchEvent = z.infer<typeof watchEventFieldsSchema> & TitleKey;
+
+/** A stored watch event includes the owning title key. */
+export const watchEventSchema = watchEventFieldsSchema.extend({
+  tmdbId: z.int(),
+  kind: kindSchema,
+});

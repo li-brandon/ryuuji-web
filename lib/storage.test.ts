@@ -1,4 +1,5 @@
 import "fake-indexeddb/auto";
+import { openDB } from "idb";
 import { IDBObjectStore } from "fake-indexeddb";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -41,7 +42,7 @@ function title(overrides: Partial<Title> = {}): Title {
 
 function event(uid: string, overrides: Partial<WatchEvent> = {}): WatchEvent {
   return {
-    uid,
+    uid: `00000000-0000-4000-8000-${uid.charCodeAt(0).toString().padStart(12, "0")}`,
     tmdbId: 1399,
     kind: "show",
     watchedAt: "2026-10-28T12:00:00.000Z",
@@ -141,10 +142,10 @@ it("stores new episode metadata and fills ID-less history together without losin
     const repo = new LibraryRepository(db);
     const original = await repo.createTitle(title({ status: "watching" }));
     const watched: WatchEvent = {
-      uid: "idless", tmdbId: original.tmdbId, kind: "show", season: 1, episode: 2,
-      tmdbEpisodeId: null, watchedAt: "2026-01-01T00:00:00Z", batchId: "original",
+      uid: "00000000-0000-4000-8000-000000000001", tmdbId: original.tmdbId, kind: "show", season: 1, episode: 2,
+      tmdbEpisodeId: null, watchedAt: "2026-01-01T00:00:00Z", batchId: "00000000-0000-4000-8000-000000000003",
     };
-    const orphan = { ...watched, uid: "removed", tmdbEpisodeId: 999 };
+    const orphan = { ...watched, uid: "00000000-0000-4000-8000-000000000002", tmdbEpisodeId: 999 };
     await repo.addWatchEvent(watched);
     await repo.addWatchEvent(orphan);
     const put = vi.spyOn(IDBObjectStore.prototype, "put");
@@ -166,4 +167,40 @@ it("stores new episode metadata and fills ID-less history together without losin
   } finally {
     db.close();
   }
+});
+
+it("closes an old connection when another tab upgrades", async () => {
+  const { name, db } = await setup();
+  const close = vi.spyOn(db, "close");
+  const upgraded = await openDB(name, 2);
+  expect(close).toHaveBeenCalledOnce();
+  expect(upgraded.version).toBe(2);
+  upgraded.close();
+});
+
+it("validates all write paths and preserves undefined update fields", async () => {
+  const { repo } = await setup();
+  await expect(repo.createTitle(title({ addedAt: "bad" }))).rejects.toThrow();
+  expect(await repo.listTitles()).toEqual([]);
+  await repo.createTitle(title({ notes: "Keep me" }));
+  await repo.updateTitle(title(), { notes: undefined });
+  const before = await repo.getTitle(title());
+  expect(before?.notes).toBe("Keep me");
+  await expect(repo.updateTitle(title(), { score: 1.5 })).rejects.toThrow();
+  await expect(repo.applyMetadata(title(), { providerData: { region: "US", fetchedAt: "bad", providers: [], rent: [], buy: [], link: null } }, "2026-10-29")).rejects.toThrow();
+  await expect(repo.addWatchEvent(event("a", { watchedAt: "bad" }))).rejects.toThrow();
+  await repo.addWatchEvent(event("a"));
+  await expect(repo.commitWatchLog(title(), { add: [event("b", { batchId: "bad" })], remove: [event("a").uid], status: "completed" })).rejects.toThrow();
+  expect(await repo.getTitle(title())).toEqual(before);
+  expect(await repo.listWatchEvents(title())).toEqual([event("a")]);
+});
+
+it("handles a failed IndexedDB request and its transaction rejection together", async () => {
+  const { repo } = await setup();
+  await repo.createTitle(title());
+  await repo.addWatchEvent(event("a"));
+  await expect(repo.addWatchEvent(event("a"))).rejects.toMatchObject({ name: "ConstraintError" });
+  expect(await repo.listWatchEvents(title())).toEqual([event("a")]);
+  await repo.addWatchEvent(event("b"));
+  expect(await repo.listWatchEvents(title())).toHaveLength(2);
 });

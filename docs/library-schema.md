@@ -2,12 +2,16 @@
 
 A versioned JSON file holding a user's whole library: titles with their watch events nested inside. The web app's import/export (LIB-420) and the macOS app's export (LIB-422) both read and write this format. The source of truth is `lib/library-schema.ts`; `parseLibraryFile` validates a file and rejects unknown formats, unknown versions and bad values.
 
+Unknown fields are rejected at every object level; validation errors include the object path and unknown field names. `schemaVersion` must be bumped whenever a field is added, including nested fields.
+
+Duplicate titles (same `tmdbId` + `kind`) and duplicate event `uid`s anywhere within one file are rejected. Errors report every duplicate occurrence after the first with its path; no partial file is imported.
+
 ## Envelope
 
 | Field           | Type   | Notes                                     |
 | --------------- | ------ | ----------------------------------------- |
 | `format`        | string | Always `"ryuuji-library"`.                |
-| `schemaVersion` | number | `1`. Bump on any breaking change.         |
+| `schemaVersion` | number | `1`. Bump whenever a field is added or on any breaking change.         |
 | `exportedAt`    | string | ISO 8601 date-time.                       |
 | `titles`        | array  | Title objects, each with `watchEvents`.   |
 
