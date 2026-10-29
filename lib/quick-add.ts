@@ -1,3 +1,4 @@
+import { withWatchLogLock } from "./watch-log-lock";
 import { fetchWatchProviders, refreshWatchProviders } from "./watch-provider-client";
 import { readWatchPreferences } from "./watch-preferences";
 import { today as localToday } from "./air-date";
@@ -146,7 +147,7 @@ export async function refreshTitle(
     ...(providerData && readWatchPreferences().region === region ? { providerData } : {}),
     lastRefreshedAt: now.toISOString(),
   };
-  return repo.applyMetadata(key, metadata, today);
+  return withWatchLogLock(() => repo.applyMetadata(key, metadata, today));
 }
 
 export type AddOutcome = { outcome: "added" | "existing"; title: Title };

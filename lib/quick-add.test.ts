@@ -1,6 +1,6 @@
 import { titleProgress } from "./progress";
 import "fake-indexeddb/auto";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import movie from "../test/fixtures/tmdb/movie-27205.json";
 import searchMovie from "../test/fixtures/tmdb/search-movie.json";
 import breakingBad from "../test/fixtures/tmdb/tv-1396.json";
@@ -21,6 +21,8 @@ import { LibraryRepository, openLibraryDB } from "./storage";
 import { TMDBRequestError } from "./tmdb-client";
 import { UndoStack } from "./undo-stack";
 import { InvalidStatusError, WatchLogService } from "./watch-log";
+
+afterEach(() => vi.unstubAllGlobals());
 
 let dbCount = 0;
 const repo = async () => new LibraryRepository(await openLibraryDB(`quick-add-${dbCount++}`));
@@ -187,6 +189,69 @@ describe("refreshTitle (LIB-415)", () => {
       "tv/1396": breakingBad,
       "tv/1396?append_to_response=season%2F1": { ...breakingBad, "season/1": breakingBadSeason1 },
     });
+
+  it("fetches outside the shared lock and serializes refresh behind a racing bulk mark", async () => {
+    const library = await repo();
+    const { title } = await addTitle(library, bb, "planToWatch", { fetcher: fetcher(), now });
+    await library.updateTitle(bb, { showStatus: "Returning Series" });
+    const order: string[] = [];
+    const request = vi.fn(async (_name: string, op: () => Promise<unknown>) => {
+      order.push("lock");
+      return op();
+    });
+    vi.stubGlobal("navigator", { locks: { request } });
+    const fetchGate = Promise.withResolvers<void>();
+    const fetching = Promise.withResolvers<void>();
+    const commitGate = Promise.withResolvers<void>();
+    const committing = Promise.withResolvers<void>();
+    const inner = fakeFetcher({
+      "tv/1396": { ...breakingBad, name: "Refreshed", status: "Returning Series", seasons: [{ season_number: 2 }] },
+      "tv/1396?append_to_response=season%2F2": {
+        "season/2": { ...breakingBadSeason1, season_number: 2, episodes: breakingBadSeason1.episodes.map(
+          (episode) => ({ ...episode, season_number: 2 }),
+        ) },
+      },
+    });
+    const fetchingMetadata: Fetcher = async (...args) => {
+      fetching.resolve();
+      await fetchGate.promise;
+      return inner(...args);
+    };
+    const apply = library.applyMetadata.bind(library);
+    vi.spyOn(library, "applyMetadata").mockImplementation(async (...args) => {
+      order.push("metadata");
+      return apply(...args);
+    });
+    const commit = library.commitWatchLog.bind(library);
+    vi.spyOn(library, "commitWatchLog").mockImplementation(async (...args) => {
+      order.push("bulk start");
+      committing.resolve();
+      await commitGate.promise;
+      const result = await commit(...args);
+      order.push("bulk done");
+      return result;
+    });
+    const refresh = refreshTitle(library, bb, { fetcher: fetchingMetadata, now, today: "2026-10-29" });
+    await fetching.promise;
+    expect(request).not.toHaveBeenCalled();
+    const bulk = new WatchLogService(library, { today: () => "2026-10-29" }).bulkMark(title, "all");
+    await committing.promise;
+    fetchGate.resolve();
+    // Flush metadata fetching while the watch-log operation is still holding the lock.
+    await vi.waitFor(() => expect(inner).toHaveBeenCalledWith("tv/1396", { append_to_response: "season/2" }));
+    expect(order).toEqual(["lock", "bulk start"]);
+    commitGate.resolve();
+    await bulk;
+    const refreshed = await refresh;
+    expect(order).toEqual(["lock", "bulk start", "bulk done", "lock", "metadata"]);
+    expect(request.mock.calls.map(([name]) => name)).toEqual(["ryuuji-watch-log", "ryuuji-watch-log"]);
+    const events = await library.listWatchEvents(bb);
+    expect(events).toHaveLength(breakingBadSeason1.episodes.length);
+    expect(events.every((event) => event.season === 2)).toBe(true);
+    expect(new Set(events.map((event) => event.tmdbEpisodeId)).size).toBe(events.length);
+    expect(refreshed).toMatchObject({ name: "Refreshed", status: "caughtUp", metadataRevision: title.metadataRevision + 1 });
+    expect(titleProgress(refreshed, events, "2026-10-29")).toMatchObject({ remaining: 0, orphanCount: 0 });
+  });
 
   it("replaces metadata but keeps history and user fields", async () => {
     const library = await repo();
