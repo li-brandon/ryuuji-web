@@ -1,5 +1,5 @@
 import "fake-indexeddb/auto";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as F from "../test/domain-fixtures";
 import { isWatched, rewatchCount, rewatchProgress, titleProgress, type Episode } from "./progress";
 import { LibraryRepository, openLibraryDB } from "./storage";
@@ -637,5 +637,76 @@ describe("title detail (LIB-415)", () => {
     expect(canStartRewatch(title, await progress(show))).toBe(false);
     await service.log(show, episodes[0]);
     expect(canStartRewatch((await repo.getTitle(show)) as Title, await progress(show))).toBe(true);
+  });
+});
+
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe("LIB-426 write hardening", () => {
+  it("serializes separate services sharing a cross-tab lock and reloads state inside it", async () => {
+    const names: string[] = [];
+    let tail: Promise<unknown> = Promise.resolve();
+    const locks = {
+      request<T>(name: string, callback: () => Promise<T>): Promise<T> {
+        names.push(name);
+        const result = tail.then(callback);
+        tail = result.catch(() => {});
+        return result;
+      },
+    };
+    vi.stubGlobal("navigator", { locks });
+    const otherRepo = new LibraryRepository(await openLibraryDB(`watch-log-${dbCount}`));
+    const other = new WatchLogService(otherRepo, { today: () => F.today });
+    const show = await makeShow(F.season(1, 4));
+    const undo = new UndoStack();
+    await Promise.all([service.bulkMark(show, { season: 1 }, undo), other.bulkMark(show, "all", undo)]);
+    expect(await events(show)).toHaveLength(4);
+    expect(new Set((await events(show)).map((e) => e.tmdbEpisodeId)).size).toBe(4);
+    expect(await status(show)).toBe("caughtUp");
+    expect(undo.size).toBe(1);
+    await undo.undo();
+    expect(await events(show)).toEqual([]);
+    expect(await status(show)).toBe("planToWatch");
+    expect(names).toEqual(Array(3).fill("ryuuji-watch-log"));
+  });
+
+  it("keeps the in-tab queue when Web Locks is missing", async () => {
+    vi.stubGlobal("navigator", {});
+    const show = await makeShow(F.season(1, 2));
+    await Promise.all([service.bulkMark(show, "all"), service.bulkMark(show, "all")]);
+    expect(await events(show)).toHaveLength(2);
+    expect(await status(show)).toBe("caughtUp");
+  });
+
+  it.each(["completed", "caughtUp"] as const)("reopens %s after the last episode is unmarked", async (initial) => {
+    const episodes = F.season(1, 1);
+    const show = await makeShow(episodes, "watching", initial === "completed" ? "Ended" : "Returning Series");
+    await service.bulkMark(show, "all");
+    await service.unmark(show, episodes[0]);
+    expect(await events(show)).toEqual([]);
+    expect(await status(show)).toBe("watching");
+  });
+
+  it.each(["watching", "completed"] as const)("setting the same %s status adds no undo step or events", async (initial) => {
+    const show = await makeShow(F.season(1, 2), initial);
+    const undo = new UndoStack();
+    await service.setStatus(show, initial, undo);
+    expect(await events(show)).toEqual([]);
+    expect(await status(show)).toBe(initial);
+    expect(undo.size).toBe(0);
+  });
+
+  it("consumes undo of removed events after deletion without restoring orphan records", async () => {
+    const episodes = F.season(1, 1);
+    const show = await makeShow(episodes);
+    await service.bulkMark(show, "all");
+    const undo = new UndoStack();
+    await service.unmark(show, episodes[0], undo);
+    await repo.deleteTitle(show);
+    await expect(undo.undo()).resolves.toBeUndefined();
+    expect(await repo.getTitle(show)).toBeUndefined();
+    expect(await events(show)).toEqual([]);
+    expect(undo.size).toBe(0);
   });
 });

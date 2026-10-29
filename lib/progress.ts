@@ -55,6 +55,17 @@ export function episodeMatcher(episodes: Episode[]): (event: EventRef) => Episod
   };
 }
 
+/** Rewrites matched history to current TMDB numbering; removed episodes remain as orphans. */
+export function remapEvents(events: WatchEvent[], episodes: Episode[]): WatchEvent[] {
+  const match = episodeMatcher(episodes);
+  return events.map((event) => {
+    const episode = match(event);
+    return episode
+      ? { ...event, season: episode.season, episode: episode.number, tmdbEpisodeId: episode.tmdbId }
+      : event;
+  });
+}
+
 export function computeProgress(episodes: Episode[], events: EventRef[], today: string): Progress {
   const match = episodeMatcher(episodes);
   const watchCounts = new Map<number, number>();
