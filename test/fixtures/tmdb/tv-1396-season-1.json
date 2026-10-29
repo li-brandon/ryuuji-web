@@ -1,0 +1,8 @@
+{
+  "season_number": 1,
+  "name": "Season 1",
+  "episodes": [
+    { "id": 62085, "season_number": 1, "episode_number": 1, "name": "Pilot", "air_date": "2008-01-20", "runtime": 59 },
+    { "id": 62086, "season_number": 1, "episode_number": 2, "name": "Cat's in the Bag...", "air_date": "2008-01-27", "runtime": 49 }
+  ]
+}

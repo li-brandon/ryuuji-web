@@ -25,4 +25,12 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      # Sentinel secrets: check:bundle fails if they (or their names) reach client assets.
       - run: npm run build
+        env:
+          TMDB_TOKEN: ryuuji-bundle-sentinel-tmdb
+          RYUUJI_PASSCODE: ryuuji-bundle-sentinel-passcode
+      - run: npm run check:bundle
+        env:
+          TMDB_TOKEN: ryuuji-bundle-sentinel-tmdb
+          RYUUJI_PASSCODE: ryuuji-bundle-sentinel-passcode
