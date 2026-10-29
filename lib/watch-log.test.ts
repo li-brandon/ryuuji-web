@@ -485,6 +485,72 @@ describe("guided rewatch (LIB-293)", () => {
   });
 });
 
+describe("deleting from History (LIB-416)", () => {
+  it("updates progress and recomputes status within the kind's allowed statuses", async () => {
+    const episodes = F.season(1, 2);
+    const show = await makeShow(episodes, "watching", "Ended");
+    await service.bulkMark(show, "all");
+    expect(await status(show)).toBe("completed");
+
+    const doomed = (await events(show)).find((e) => e.episode === 2)!;
+    await service.deleteEvent(doomed.uid);
+
+    expect(isWatched(await progress(show), episodes[1])).toBe(false);
+    expect((await progress(show)).remaining).toBe(1);
+    expect(await status(show)).toBe("watching");
+    expect(allowedStatuses("show")).toContain(await status(show));
+
+    const movie = await makeMovie();
+    await service.log(movie, null);
+    const [watch] = await events(movie);
+    await service.deleteEvent(watch.uid);
+    expect(await events(movie)).toHaveLength(0);
+    expect(await status(movie)).toBe("planToWatch");
+    expect(allowedStatuses("movie")).toContain(await status(movie));
+  });
+
+  it("keeps the episode watched when only a rewatch is deleted", async () => {
+    const episodes = F.season(1, 2);
+    const show = await makeShow(episodes, "watching", "Ended");
+    await service.log(show, episodes[0]);
+    await service.log(show, episodes[1]);
+    await service.log(show, episodes[1]);
+    const rewatch = (await events(show)).find((e) => e.episode === 2)!;
+    await service.deleteEvent(rewatch.uid);
+    expect(isWatched(await progress(show), episodes[1])).toBe(true);
+    expect(rewatchCount(await progress(show), episodes[1])).toBe(0);
+    expect(await status(show)).toBe("completed");
+  });
+
+  it("registers exactly one undo step that restores the event and status", async () => {
+    const undo = new UndoStack();
+    const episodes = F.season(1, 3);
+    const show = await makeShow(episodes, "watching", "Returning Series");
+    await service.bulkMark(show, "all");
+    expect(await status(show)).toBe("caughtUp");
+    const before = await events(show);
+
+    await service.deleteEvent(before[0].uid, undo);
+    expect(await events(show)).toHaveLength(2);
+    expect(await status(show)).toBe("watching");
+    expect(undo.size).toBe(1);
+    expect(undo.undoActionName).toBe("Delete Watch");
+
+    await undo.undo();
+
+    expect(undo.canUndo).toBe(false);
+    const sortByUid = (list: typeof before) => [...list].sort((a, b) => a.uid.localeCompare(b.uid));
+    expect(sortByUid(await events(show))).toEqual(sortByUid(before));
+    expect(await status(show)).toBe("caughtUp");
+  });
+
+  it("does nothing and registers no undo for an unknown event", async () => {
+    const undo = new UndoStack();
+    await service.deleteEvent(crypto.randomUUID(), undo);
+    expect(undo.canUndo).toBe(false);
+  });
+});
+
 describe("title detail (LIB-415)", () => {
   it("marks up to an episode across seasons, skipping specials, as one undo step with a shared batch id", async () => {
     const episodes = [...F.season(0, 2), ...F.season(1, 3), ...F.season(2, 3)];
