@@ -1,0 +1,15 @@
+{
+  "page": 1,
+  "results": [
+    {
+      "id": 27205,
+      "title": "Inception",
+      "release_date": "2010-07-15",
+      "poster_path": "/oYuLEt3zVCKq57qu2F8dT7NIa6f.jpg",
+      "genre_ids": [28, 878, 12],
+      "original_language": "en"
+    }
+  ],
+  "total_pages": 1,
+  "total_results": 1
+}

@@ -1,0 +1,18 @@
+{
+  "id": 209867,
+  "name": "Frieren: Beyond Journey's End",
+  "original_name": "葬送のフリーレン",
+  "overview": "After the party of heroes defeated the Demon King, they restored peace to the land and returned to lives of solitude.",
+  "poster_path": "/dqZENchTd7lp5zht7BdlqM7RBhD.jpg",
+  "first_air_date": "2023-09-29",
+  "status": "Returning Series",
+  "genres": [
+    { "id": 16, "name": "Animation" },
+    { "id": 10759, "name": "Action & Adventure" },
+    { "id": 10765, "name": "Sci-Fi & Fantasy" }
+  ],
+  "origin_country": ["JP"],
+  "original_language": "ja",
+  "episode_run_time": [],
+  "seasons": [{ "season_number": 1, "name": "Season 1", "episode_count": 28 }]
+}

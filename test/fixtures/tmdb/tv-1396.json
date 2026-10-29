@@ -1,0 +1,17 @@
+{
+  "id": 1396,
+  "name": "Breaking Bad",
+  "original_name": "Breaking Bad",
+  "overview": "Walter White, a New Mexico chemistry teacher, is diagnosed with Stage III cancer and given a prognosis of only two years left to live.",
+  "poster_path": "/ztkUQFLlC19CCMYHW9o1zWhJRNq.jpg",
+  "first_air_date": "2008-01-20",
+  "status": "Ended",
+  "genres": [
+    { "id": 18, "name": "Drama" },
+    { "id": 80, "name": "Crime" }
+  ],
+  "origin_country": ["US"],
+  "original_language": "en",
+  "episode_run_time": [45, 47],
+  "seasons": [{ "season_number": 1, "name": "Season 1", "episode_count": 7 }]
+}
