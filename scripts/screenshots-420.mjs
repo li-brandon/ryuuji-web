@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, readFileSync } from "node:fs";
 import { chromium } from "playwright";
 const base = process.env.BASE_URL ?? "http://localhost:3000";
-const out = "/workspace/ryuuji-shots/420";
+const out = process.env.SCREENSHOT_DIR ?? "/workspace/ryuuji-shots/420";
 const fixture = (name) => JSON.parse(readFileSync(new URL(`../test/fixtures/tmdb/${name}.json`, import.meta.url), "utf8"));
 async function assertTapTargets(page) {
   for (const control of await page.locator('main a, main button, main select, main textarea, main input').all()) {
@@ -52,6 +52,8 @@ try {
     await page.locator('input[type="file"]').setInputFiles(new URL("../test/fixtures/macos-library-export.json", import.meta.url).pathname);
     await page.getByRole("heading", { name: "Import preview" }).waitFor();
     await page.getByText("3 titles to add", { exact: false }).waitFor();
+    await page.getByLabel("Import details").waitFor();
+    assert.equal(await page.getByText("0 invalid", { exact: false }).count(), 0);
     await shot(page, `preview-${width}-${colorScheme}`, width === 375);
     assert.deepEqual(errors, []);
     await context.close();

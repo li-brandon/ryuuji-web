@@ -1,40 +1,21 @@
 "use client";
 
 import { useId, useLayoutEffect, useSyncExternalStore } from "react";
-import { applyTheme, parseTheme, resolveTheme, THEME_STORAGE_KEY, THEMES, type ThemePreference } from "@/lib/theme";
+import { applyTheme, readTheme, setTheme, resolveTheme, THEME_CHANGE, THEMES, type ThemePreference } from "@/lib/theme";
 import { cx } from "./cx";
 import { Icon } from "./Icon";
 import styles from "./ui.module.css";
 
-const CHANGE = "ryuuji-theme-change";
 const DARK = "(prefers-color-scheme: dark)";
 const LABELS: Record<ThemePreference, string> = { system: "System", light: "Light", dark: "Dark" };
 
-function readTheme(): ThemePreference {
-  try {
-    return parseTheme(localStorage.getItem(THEME_STORAGE_KEY));
-  } catch {
-    return "system";
-  }
-}
-
-function setTheme(preference: ThemePreference) {
-  try {
-    localStorage.setItem(THEME_STORAGE_KEY, preference);
-  } catch {
-    // Private mode: the choice lasts for this page only.
-  }
-  applyTheme(preference);
-  window.dispatchEvent(new Event(CHANGE));
-}
-
 function subscribe(onChange: () => void) {
   const media = matchMedia(DARK);
-  window.addEventListener(CHANGE, onChange);
+  window.addEventListener(THEME_CHANGE, onChange);
   window.addEventListener("storage", onChange);
   media.addEventListener("change", onChange);
   return () => {
-    window.removeEventListener(CHANGE, onChange);
+    window.removeEventListener(THEME_CHANGE, onChange);
     window.removeEventListener("storage", onChange);
     media.removeEventListener("change", onChange);
   };

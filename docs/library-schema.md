@@ -2,7 +2,7 @@
 
 A versioned JSON file holding a user's whole library: titles with their watch events nested inside. The web app's import/export (LIB-420) and the macOS app's export (LIB-422) both read and write this format. The source of truth is `lib/library-schema.ts`; `parseLibraryFile` validates a file and rejects unknown formats, unknown versions and bad values.
 
-Unknown fields are rejected at every object level; validation errors include the object path and unknown field names. `schemaVersion` must be bumped whenever a field is added, including nested fields.
+Unknown fields are rejected at every object level; validation errors include the object path and unknown field names. Breaking changes require a schema version bump. Version 1 also accepts optional non-secret settings.
 
 Duplicate titles (same `tmdbId` + `kind`) and duplicate event `uid`s anywhere within one file are rejected. Errors report every duplicate occurrence after the first with its path; no partial file is imported.
 
@@ -11,8 +11,9 @@ Duplicate titles (same `tmdbId` + `kind`) and duplicate event `uid`s anywhere wi
 | Field           | Type   | Notes                                     |
 | --------------- | ------ | ----------------------------------------- |
 | `format`        | string | Always `"ryuuji-library"`.                |
-| `schemaVersion` | number | `1`. Bump whenever a field is added or on any breaking change.         |
+| `schemaVersion` | number | `1`. Bump on breaking changes.         |
 | `exportedAt`    | string | ISO 8601 date-time.                       |
+| `settings`      | object | Optional theme and watch preferences; see below. |
 | `titles`        | array  | Title objects, each with `watchEvents`.   |
 
 ## Title
@@ -32,7 +33,7 @@ Differences from the macOS storage:
 
 ## Watch providers
 
-`providerData` caches one region: `region`, ISO `fetchedAt`, subscription `providers`, `rent`, `buy`, and nullable TMDB watch-page `link`. Each provider has `id`, `name`, nullable `logoPath`, and `displayPriority`. `rent` and `buy` default to empty arrays when omitted, preserving version 1 compatibility with existing web and macOS files. Only subscription providers match My services badges; another region’s cache is hidden. Region and service preferences stay in localStorage, outside the interchange file. Streaming data is supplied by JustWatch through TMDB.
+`providerData` caches one region: `region`, ISO `fetchedAt`, subscription `providers`, `rent`, `buy`, and nullable TMDB watch-page `link`. Each provider has `id`, `name`, nullable `logoPath`, and `displayPriority`. `rent` and `buy` default to empty arrays when omitted, preserving version 1 compatibility with existing web and macOS files. Only subscription providers match My services badges; another region’s cache is hidden. Region and service preferences are included in optional `settings.watch`. Streaming data is supplied by JustWatch through TMDB.
 
 ## Watch event
 
@@ -45,6 +46,7 @@ Differences from the macOS storage:
   "format": "ryuuji-library",
   "schemaVersion": 1,
   "exportedAt": "2026-10-28T09:30:00Z",
+  "settings": { "theme": "system", "watch": { "region": "US", "services": [1899] } },
   "titles": [
     {
       "tmdbId": 1399,
@@ -124,10 +126,18 @@ TMDB id and kind; event UIDs match across the entire library. A conflicting even
 keeps the existing event and is reported separately in preview. Confirmation recomputes
 against current data under the watch-log lock, then commits both stores atomically.
 
-Merge rule: incoming status replaces only `planToWatch`, score replaces only `null`, and
-notes replace only blank notes. Existing non-default choices always win, regardless of
-export timestamps. Metadata fills only null, empty string, or empty array fields; false
-booleans, revision numbers, added dates, and refresh timestamps remain unchanged.
+Merge rule: keep the newer status, score, and notes. The current Title schema has no
+per-title user modification timestamp, and local storage has no separate title modification
+record. `addedAt` is creation time, `lastRefreshedAt` and `providerData.fetchedAt` describe
+metadata caches, and event `watchedAt` is viewing time; none represents a title edit.
+Consequently there are no comparable modification times in version 1: imports are treated
+as newer. Incoming status (including `planToWatch`), non-null score (including zero), and
+non-blank notes win. Null scores and blank notes never erase local values. No title fields
+are added for timestamp tracking. If modification times become available, compare per-title
+times first; otherwise compare file `exportedAt` with the local title modification time.
+Metadata fills only null, empty string, or empty array fields; false booleans, revision
+numbers, added dates, and refresh timestamps remain unchanged. Preview lists every changed
+title field (old → new) and every differing discarded value with its field and reason.
 Preview counts changed existing titles as “to merge”; identical titles are “unchanged”.
 Re-importing identical data performs no puts/adds and leaves metadataRevision unchanged.
 
@@ -135,4 +145,11 @@ Changed titles (including titles with added events) enter the metadata scheduler
 localStorage queue. Refresh retries offline/failed work and uses the existing metadata
 refresh path to remap history. Export does not clear cached timestamps or revisions.
 Backups use deterministic title/key and event/UID ordering and a consistent read transaction.
-Settings, theme, provider preferences, credentials, and secrets are excluded from version 1.
+Optional `settings` is a strict object with optional `theme` (`system`, `light`, `dark`)
+and optional `watch` (strict object with `region`, a two-letter uppercase country code,
+and `services`, an array of nonnegative integer provider IDs). Omitted watch members use
+the app defaults (US and an empty service list). Export includes current preferences;
+preview lists settings changes. Import restores only supplied settings after the library
+transaction commits, using the app setters and change events. Missing settings leave local
+preferences unchanged. The macOS exporter may omit settings. Passcodes, tokens, credentials,
+and other secrets are never exported or restored; unknown settings keys are rejected.

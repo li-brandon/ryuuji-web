@@ -1,3 +1,5 @@
+import { setTheme } from "./theme";
+import { saveWatchPreferences } from "./watch-preferences";
 import { planLibraryImport, readLibraryFile, type ImportPlan } from "./library-import";
 import { withWatchLogLock } from "./watch-log-lock";
 import { notifyLibraryChanged } from "./library-changes";
@@ -91,6 +93,8 @@ export class LibraryRepository {
         for (const event of current.events) await events.add(watchEventSchema.parse(event));
         return current;
       });
+      if (file.settings?.theme !== undefined) setTheme(file.settings.theme);
+      if (file.settings?.watch !== undefined) saveWatchPreferences(file.settings.watch);
       if (result.titles.length || result.events.length) notifyLibraryChanged();
       return result;
     });
