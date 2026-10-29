@@ -78,6 +78,13 @@ export function applyMovie(movie: TMDBMovie, title: Title): Title {
   };
 }
 
+/**
+ * TMDB's status string as a `ShowStatus`; unrecognized values become `Unknown`, matching the
+ * macOS exporter's `ShowStatus(tmdb:)`, so exported files always hold a schema enum value.
+ */
+export const showStatus = (status?: string | null): ShowStatus | null =>
+  status == null ? null : (SHOW_STATUSES as readonly string[]).includes(status) ? (status as ShowStatus) : "Unknown";
+
 /** Applies show details and replaces the cached seasons, bumping `metadataRevision`. */
 export function applyShow(show: TMDBShow, seasons: TMDBSeason[], title: Title): Title {
   const originCountries = show.origin_country ?? [];
@@ -92,7 +99,7 @@ export function applyShow(show: TMDBShow, seasons: TMDBSeason[], title: Title): 
     genres: show.genres.map((g) => g.name),
     originCountries,
     originalLanguage: show.original_language ?? "",
-    showStatus: show.status == null ? null : (SHOW_STATUSES as readonly string[]).includes(show.status) ? (show.status as ShowStatus) : "Unknown",
+    showStatus: showStatus(show.status),
     isAnime: isAnime(show.genres.map((g) => g.id), originCountries, show.original_language),
     episodes: episodeMetadata(seasons),
     metadataRevision: title.metadataRevision + 1,

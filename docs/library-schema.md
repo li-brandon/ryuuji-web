@@ -24,6 +24,8 @@ Fields mirror the macOS `Title` model (`SchemaV2`). Raw values match the Swift e
 - `status`: `planToWatch`, `watching`, `rewatching`, `caughtUp`, `onHold`, `dropped`, `completed`
 - `showStatus`: `Returning Series`, `Ended`, `Canceled`, `In Production`, `Planned`, `Pilot`, `Unknown`
 
+`showStatus` is always one of these values; no other string is valid in a file. TMDB may report other statuses. The macOS app stores TMDB's raw string, but its exporter writes `ShowStatus(tmdb:)`, which maps unrecognized values to `Unknown`. The web mapper (`showStatus` in `lib/title-mapper.ts`) does the same when it reads TMDB. Either way, exports hold `Unknown` and round-trip through import unchanged. The original TMDB string is not preserved; the next metadata refresh fetches it again.
+
 Differences from the macOS storage:
 
 - `kindRaw`, `statusRaw`, `showStatusRaw` are named `kind`, `status`, `showStatus`.

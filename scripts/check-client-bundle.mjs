@@ -1,13 +1,12 @@
 // Fails if server secrets (their names, or their build-time values) appear in client assets.
-// CI builds with sentinel TMDB_TOKEN / RYUUJI_PASSCODE values, then runs this.
+// CI builds with sentinel TMDB_TOKEN / RYUUJI_PASSCODE / RYUUJI_SESSION_SECRET values, then runs this.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const DIR = ".next/static";
 const SENTINEL = "ryuuji-bundle-sentinel";
-const needles = ["TMDB_TOKEN", "RYUUJI_PASSCODE", SENTINEL, process.env.TMDB_TOKEN, process.env.RYUUJI_PASSCODE].filter(
-  (s) => s && s.length >= 8,
-);
+const SECRETS = ["TMDB_TOKEN", "RYUUJI_PASSCODE", "RYUUJI_SESSION_SECRET"];
+const needles = [...SECRETS, SENTINEL, ...SECRETS.map((name) => process.env[name])].filter((s) => s && s.length >= 8);
 
 if (!existsSync(DIR)) {
   console.error(`${DIR} not found; run \`npm run build\` first.`);
