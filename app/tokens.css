@@ -1,0 +1,128 @@
+/*
+ * Design tokens: the only place raw values live. Colors use light-dark(), so any element with
+ * data-theme="light" | "dark" (or the system setting, when unset) gets the matching palette.
+ * Text colors meet WCAG AA (4.5:1) on --bg, --surface and their tinted pills in both themes.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* Spacing (4px grid) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 22px;
+  --radius-full: 999px;
+
+  /* Type: Inter for UI text, Fraunces for display (see app/layout.tsx). */
+  --font-sans: var(--font-text), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: var(--font-serif), Georgia, "Times New Roman", serif;
+  --text-xs: 0.75rem; /* 12 */
+  --text-sm: 0.875rem; /* 14 */
+  --text-base: 1rem; /* 16 */
+  --text-lg: 1.125rem; /* 18 */
+  --text-xl: 1.375rem; /* 22 */
+  --text-2xl: 1.75rem; /* 28 */
+  --text-3xl: clamp(2rem, 1.6rem + 1.6vw, 2.5rem); /* 32–40 */
+  --leading-tight: 1.2;
+  --leading: 1.5;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* Motion */
+  --duration-fast: 120ms;
+  --duration: 200ms;
+  --duration-slow: 360ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  /* Layout */
+  --tabbar-height: 60px;
+  --sidebar-width: 248px;
+  --content-max: 1120px;
+  --tap: 44px;
+}
+
+/*
+ * Colors and shadows resolve light-dark() where they are declared, so they are declared on every
+ * themed element too; that lets /components show a light and a dark pane side by side.
+ */
+:root,
+[data-theme] {
+  /* Color */
+  --bg: light-dark(#f6f6f8, #0b0b0e);
+  --surface: light-dark(#ffffff, #151519);
+  --surface-2: light-dark(#eeeef2, #1f1f25);
+  --surface-3: light-dark(#e4e4ea, #2a2a32);
+  --surface-raised: light-dark(#ffffff, #2e2e37);
+  --border: light-dark(#e2e2e8, #26262e);
+  --border-strong: light-dark(#c9c9d2, #3a3a44);
+  --text: light-dark(#141418, #f3f3f6);
+  --text-2: light-dark(#5c5c68, #a3a3b0);
+  --accent: light-dark(#c8361d, #ff7552);
+  --accent-hover: light-dark(#ad2e18, #ff8f72);
+  --on-accent: light-dark(#ffffff, #1c0904);
+  --accent-text: light-dark(#b8321a, #ff8a6b);
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+  --danger: light-dark(#ab2129, #ff8f8f);
+  --success: light-dark(#16672f, #74d792);
+  --focus: light-dark(#1a55b8, #86b4ff);
+  --scrim: light-dark(rgb(20 20 24 / 0.36), rgb(0 0 0 / 0.6));
+  --glass: color-mix(in srgb, var(--surface) 82%, transparent);
+  --toast-bg: light-dark(#1f1f25, #2b2b33);
+  --toast-text: #f3f3f6;
+  --toast-action: #ff8a6b;
+  --shimmer: light-dark(rgb(255 255 255 / 0.65), rgb(255 255 255 / 0.07));
+
+  /* ListStatus hues: used as text on a 14% tint of themselves. */
+  --status-planToWatch: light-dark(#52596a, #b7bdca);
+  --status-watching: light-dark(#1a55b8, #86b4ff);
+  --status-rewatching: light-dark(#6236c4, #bba6ff);
+  --status-caughtUp: light-dark(#08665c, #5fd3c3);
+  --status-onHold: light-dark(#7e4900, #f2b54a);
+  --status-dropped: light-dark(#ab2129, #ff8f8f);
+  --status-completed: light-dark(#16672f, #74d792);
+
+  /* Elevation */
+  --shadow-1: 0 1px 2px light-dark(rgb(20 20 30 / 0.06), rgb(0 0 0 / 0.4));
+  --shadow-2: 0 2px 6px light-dark(rgb(20 20 30 / 0.06), rgb(0 0 0 / 0.35)),
+    0 8px 24px light-dark(rgb(20 20 30 / 0.08), rgb(0 0 0 / 0.45));
+  --shadow-3: 0 12px 48px light-dark(rgb(20 20 30 / 0.18), rgb(0 0 0 / 0.6));
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration: 0ms;
+    --duration-slow: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

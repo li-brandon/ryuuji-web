@@ -1,13 +1,21 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { cx } from "@/components/ui/cx";
+import { Icon } from "@/components/ui/Icon";
+import { ListRow } from "@/components/ui/ListRow";
+import { Poster } from "@/components/ui/Poster";
+import { Sheet } from "@/components/ui/Sheet";
 import { addTitle, isQuickAddShortcut, itemId, moveSelection, posterUrl, searchTitles, type SearchItem } from "@/lib/quick-add";
 import { libraryRepository } from "@/lib/storage";
 import { TMDBRequestError } from "@/lib/tmdb-client";
+import styles from "./QuickAdd.module.css";
 
 // Port of the macOS QuickAddPanel: Cmd/Ctrl-K search-and-add, Return adds as Plan to Watch.
 
 const DEBOUNCE_MS = 300;
+const OPEN_EVENT = "ryuuji:quick-add";
 
 type Phase = { kind: "idle" | "searching" | "done" } | { kind: "failed"; message: string };
 
@@ -19,7 +27,6 @@ const errorText = (error: unknown) =>
       : String(error);
 
 export function QuickAdd() {
-  const dialog = useRef<HTMLDialogElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -39,13 +46,19 @@ export function QuickAdd() {
       e.preventDefault();
       setOpen(true);
     };
+    const onOpen = () => setOpen(true);
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener(OPEN_EVENT, onOpen);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener(OPEN_EVENT, onOpen);
+    };
   }, []);
 
   useEffect(() => {
     if (!open) return;
-    dialog.current?.showModal();
+    // The Sheet's effect has already shown the dialog.
+    input.current?.focus();
     libraryRepository()
       .then((repo) => repo.listTitles())
       .then((titles) => setInLibrary(new Set(titles.map(itemId))))
@@ -87,10 +100,10 @@ export function QuickAdd() {
   }, [listId, selected]);
 
   function close() {
-    dialog.current?.close();
+    setOpen(false);
   }
 
-  /** Runs when the dialog closes for any reason (Escape, backdrop, close()). */
+  /** Runs when the sheet closes for any reason (Escape, backdrop, close()). */
   function reset() {
     setOpen(false);
     setQuery("");
@@ -149,101 +162,104 @@ export function QuickAdd() {
 
   return (
     <>
-      <button type="button" className="search-button" onClick={() => setOpen(true)} aria-haspopup="dialog">
-        Search <kbd>⌘K</kbd>
+      <button type="button" className={styles.trigger} onClick={() => setOpen(true)} aria-haspopup="dialog" aria-label="Search (⌘K)">
+        <Icon name="search" />
+        <span className={styles.label}>Search</span>
+        <kbd className={styles.kbd}>⌘K</kbd>
       </button>
-      <dialog
-        ref={dialog}
-        className="quick-add"
-        aria-label="Search movies and shows"
-        onClose={reset}
-        onClick={(e) => e.target === dialog.current && close()}
-      >
-        {open && (
-          <div className="quick-add-panel">
-            <div className="quick-add-field">
-              <input
-                ref={input}
-                type="text"
-                role="combobox"
-                aria-label="Search movies and shows"
-                aria-expanded={results.length > 0}
-                aria-controls={listId}
-                aria-activedescendant={active}
-                aria-autocomplete="list"
-                placeholder="Search movies and shows"
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="off"
-                spellCheck={false}
-                enterKeyHint="go"
-                autoFocus
-                value={query}
-                onChange={(e) => onQueryChange(e.target.value)}
-                onKeyDown={onKeyDown}
-              />
-              <button type="button" onClick={close}>
-                Close
-              </button>
-            </div>
-
-            {needsPasscode && (
-              <PasscodeForm
-                onUnlocked={() => {
-                  setNeedsPasscode(false);
-                  setRetry((n) => n + 1);
-                  input.current?.focus();
-                }}
-              />
-            )}
-
-            {phase.kind === "searching" && <p className="hint">Searching…</p>}
-            {phase.kind === "failed" && (
-              <p className="hint error" role="alert">
-                {phase.message}
-              </p>
-            )}
-            {phase.kind === "done" && !results.length && <p className="hint">No movies or shows match “{query.trim()}”.</p>}
-            {phase.kind === "idle" && !needsPasscode && (
-              <p className="hint">Type to search TMDB. ↑↓ to move, Return adds as Plan to Watch, Esc closes.</p>
-            )}
-
-            <ul id={listId} role="listbox" aria-label="Results" className="results" hidden={!results.length}>
-              {results.map((item, i) => {
-                const id = itemId(item);
-                const status = adding.has(id) ? "Adding…" : inLibrary.has(id) ? "Added" : null;
-                return (
-                  <li
-                    key={id}
-                    id={`${listId}-${i}`}
-                    role="option"
-                    aria-selected={i === selected}
-                    className="result"
-                    onClick={() => {
-                      setSelected(i);
-                      void add(item);
-                    }}
-                  >
-                    <Poster path={item.posterPath} />
-                    <span className="result-text">
-                      <span className="result-name">{item.name}</span>
-                      <span className="muted">
-                        {[item.year, item.kind === "movie" ? "Movie" : "Show", item.isAnime && "Anime"].filter(Boolean).join(" · ")}
-                      </span>
-                    </span>
-                    <span className={status === "Added" ? "badge added" : "badge"}>{status ?? "Add"}</span>
-                  </li>
-                );
-              })}
-            </ul>
-
-            <p className="hint" role="status">
-              {message}
-            </p>
+      <Sheet open={open} onClose={reset} label="Search movies and shows" className={styles.sheet}>
+        <div className={styles.panel}>
+          <div className={styles.field}>
+            <Icon name="search" />
+            <input
+              ref={input}
+              type="text"
+              role="combobox"
+              aria-label="Search movies and shows"
+              aria-expanded={results.length > 0}
+              aria-controls={listId}
+              aria-activedescendant={active}
+              aria-autocomplete="list"
+              placeholder="Search movies and shows"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              enterKeyHint="go"
+              value={query}
+              onChange={(e) => onQueryChange(e.target.value)}
+              onKeyDown={onKeyDown}
+            />
+            <Button variant="ghost" icon="close" aria-label="Close" onClick={close} />
           </div>
-        )}
-      </dialog>
+
+          {needsPasscode && (
+            <PasscodeForm
+              onUnlocked={() => {
+                setNeedsPasscode(false);
+                setRetry((n) => n + 1);
+                input.current?.focus();
+              }}
+            />
+          )}
+
+          {phase.kind === "searching" && <p className={styles.hint}>Searching…</p>}
+          {phase.kind === "failed" && (
+            <p className={cx(styles.hint, styles.error)} role="alert">
+              {phase.message}
+            </p>
+          )}
+          {phase.kind === "done" && !results.length && <p className={styles.hint}>No movies or shows match “{query.trim()}”.</p>}
+          {phase.kind === "idle" && !needsPasscode && (
+            <p className={styles.hint}>
+              Find a movie or show on TMDB and add it to Plan to Watch.
+              <span className={styles.keys}> ↑↓ to move, Return adds, Esc closes.</span>
+            </p>
+          )}
+
+          <ul id={listId} role="listbox" aria-label="Results" className={styles.results} hidden={!results.length}>
+            {results.map((item, i) => {
+              const id = itemId(item);
+              const status = adding.has(id) ? "Adding…" : inLibrary.has(id) ? "Added" : null;
+              return (
+                <ListRow
+                  key={id}
+                  id={`${listId}-${i}`}
+                  role="option"
+                  aria-selected={i === selected}
+                  onClick={() => {
+                    setSelected(i);
+                    void add(item);
+                  }}
+                  leading={<Poster src={posterUrl(item.posterPath)} small />}
+                  title={item.name}
+                  subtitle={[item.year, item.kind === "movie" ? "Movie" : "Show", item.isAnime && "Anime"].filter(Boolean).join(" · ")}
+                  trailing={
+                    <span className={cx(styles.badge, status === "Added" && styles.added)}>
+                      <Icon name={status === "Added" ? "check" : "plus"} size={16} />
+                      {status ?? "Add"}
+                    </span>
+                  }
+                />
+              );
+            })}
+          </ul>
+
+          <p className={styles.hint} role="status">
+            {message}
+          </p>
+        </div>
+      </Sheet>
     </>
+  );
+}
+
+/** Opens the quick-add panel from anywhere (e.g. an empty state). */
+export function QuickAddButton({ children }: { children: React.ReactNode }) {
+  return (
+    <Button variant="primary" icon="search" onClick={() => window.dispatchEvent(new Event(OPEN_EVENT))}>
+      {children}
+    </Button>
   );
 }
 
@@ -251,6 +267,7 @@ function PasscodeForm({ onUnlocked }: { onUnlocked: () => void }) {
   const [passcode, setPasscode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const inputId = useId();
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -275,28 +292,22 @@ function PasscodeForm({ onUnlocked }: { onUnlocked: () => void }) {
   }
 
   return (
-    <form className="passcode" onSubmit={submit}>
-      <label>
+    <form className={styles.passcode} onSubmit={submit}>
+      <label htmlFor={inputId} className={styles.passcodeTitle}>
+        <Icon name="lock" size={18} />
         Enter the passcode to search TMDB
-        <input type="password" autoComplete="current-password" autoFocus value={passcode} onChange={(e) => setPasscode(e.target.value)} required />
       </label>
-      <button type="submit" disabled={busy}>
-        Unlock
-      </button>
+      <div className={styles.passcodeRow}>
+        <input id={inputId} type="password" autoComplete="current-password" autoFocus value={passcode} onChange={(e) => setPasscode(e.target.value)} required />
+        <Button type="submit" variant="primary" disabled={busy}>
+          Unlock
+        </Button>
+      </div>
       {error && (
-        <p className="hint error" role="alert">
+        <p className={cx(styles.hint, styles.error)} role="alert">
           {error}
         </p>
       )}
     </form>
   );
-}
-
-function Poster({ path }: { path: string | null }) {
-  const [failed, setFailed] = useState(false);
-  const src = posterUrl(path);
-  if (!src || failed) return <span className="poster placeholder" aria-hidden="true" />;
-  // TMDB serves pre-sized posters, so next/image optimization adds nothing here.
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img className="poster" src={src} alt="" width={46} height={69} loading="lazy" onError={() => setFailed(true)} />;
 }
