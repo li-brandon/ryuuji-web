@@ -22,6 +22,13 @@ export default function SettingsPage() {
         <MetadataSettings />
         <WatchProviderSettings />
         <section className="section">
+          <h2>About</h2>
+          <p>Data sources, credits and terms.</p>
+          <Link href="/about" className={buttonClass({}, "self-start")}>
+            About Ryuuji
+          </Link>
+        </section>
+        <section className="section">
           <h2>Design system</h2>
           <p>Every shared component in light and dark, side by side.</p>
           <Link href="/components" className={buttonClass({}, "self-start")}>
