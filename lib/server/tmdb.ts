@@ -54,6 +54,8 @@ const ENDPOINTS: Endpoint[] = [
     },
   },
   { path: /^(movie|tv)\/\d{1,9}\/watch\/providers$/, revalidate: DAY, params: {} },
+  { path: /^watch\/providers\/regions$/, revalidate: DAY, params: { language } },
+  { path: /^watch\/providers\/(movie|tv)$/, revalidate: DAY, params: { language, watch_region: /^[A-Z]{2}$/ } },
   { path: /^configuration$/, revalidate: DAY, params: {} },
 ];
 

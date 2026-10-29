@@ -1,0 +1,18 @@
+{
+  "id": 1396,
+  "results": {
+    "US": {
+      "link": "https://www.themoviedb.org/tv/1396/watch?locale=US",
+      "flatrate": [
+        {"provider_id":8,"provider_name":"Netflix","logo_path":"/netflix.png","display_priority":1},
+        {"provider_id":9,"provider_name":"Amazon Prime Video","logo_path":"/prime.png","display_priority":3}
+      ],
+      "rent": [{"provider_id":10,"provider_name":"Amazon Video","logo_path":"/amazon.png","display_priority":8}],
+      "buy": [{"provider_id":2,"provider_name":"Apple TV Store","logo_path":"/apple.png","display_priority":5}]
+    },
+    "JP": {
+      "link": "https://www.themoviedb.org/tv/1396/watch?locale=JP",
+      "flatrate": [{"provider_id":9,"provider_name":"Amazon Prime Video","logo_path":"/prime.png","display_priority":1}]
+    }
+  }
+}

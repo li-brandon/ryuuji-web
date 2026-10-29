@@ -1,5 +1,6 @@
 "use client";
 
+import { WatchProviderBadges, JustWatchAttribution } from "@/components/WatchProviders";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -105,10 +106,11 @@ export function Library() {
         <h2 className={styles.heading}>{STATUS_LABELS[group.status]} <span>{group.entries.length}</span></h2>
         <ul className={styles.list}>{group.entries.map(({ title, events }) => {
           const progress = titleProgress(title, events, today());
-          return <ListRow key={`${title.kind}-${title.tmdbId}`} leading={<Link href={href(title)} aria-label={`Open ${title.name}`}><Poster small src={title.posterPath ? `https://image.tmdb.org/t/p/w92${title.posterPath}` : null} /></Link>} title={<Link className={styles.title} href={href(title)}>{title.name}</Link>} subtitle={<span className={styles.meta}><span>{title.kind === "show" ? `${progress.watchedAiredRegularCount} of ${progress.airedRegular.length} ${progress.airedRegular.length === 1 ? "episode" : "episodes"}` : progress.eventCount > 0 ? "Watched" : "Movie"}{title.isAnime ? " · Anime" : ""}</span><StatusPill status={title.status} /></span>} trailing={<Button variant="ghost" aria-label={`Actions for ${title.name}`} aria-haspopup="dialog" onClick={() => setSelection({ title, confirm: false })}>•••</Button>} />;
+          return <ListRow key={`${title.kind}-${title.tmdbId}`} leading={<Link href={href(title)} aria-label={`Open ${title.name}`}><Poster small src={title.posterPath ? `https://image.tmdb.org/t/p/w92${title.posterPath}` : null} /></Link>} title={<Link className={styles.title} href={href(title)}>{title.name}</Link>} subtitle={<span className={styles.meta}><span>{title.kind === "show" ? `${progress.watchedAiredRegularCount} of ${progress.airedRegular.length} ${progress.airedRegular.length === 1 ? "episode" : "episodes"}` : progress.eventCount > 0 ? "Watched" : "Movie"}{title.isAnime ? " · Anime" : ""}</span><StatusPill status={title.status} /><WatchProviderBadges title={title} /></span>} trailing={<Button variant="ghost" aria-label={`Actions for ${title.name}`} aria-haspopup="dialog" onClick={() => setSelection({ title, confirm: false })}>•••</Button>} />;
         })}</ul>
       </section>)}
     </div>
+    <JustWatchAttribution />
     <Sheet open={selection !== null} label={selection?.confirm ? `Remove ${selection.title.name}?` : selection?.title.name ?? "Title actions"} title onClose={() => { if (!lock.current) setSelection(null); }}>
       {selection && (selection.confirm ? <div className={styles.actions}><p>This removes the title and all its watch history. This cannot be undone.</p><Button autoFocus disabled={busy} onClick={() => setSelection(null)}>Cancel</Button><Button variant="danger" disabled={busy} onClick={() => void change()}>Remove from library</Button></div> : <div className={styles.actions}>
         <Link className={buttonClass()} href={href(selection.title)}>Open detail</Link>

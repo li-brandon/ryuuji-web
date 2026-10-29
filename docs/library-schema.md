@@ -26,6 +26,10 @@ Differences from the macOS storage:
 - All dates are ISO 8601 strings, including `providerData.fetchedAt`. `releaseDate` and `airDate` stay `yyyy-MM-dd`.
 - Optional fields may be `null` or omitted; omitted ones read as `null`.
 
+## Watch providers
+
+`providerData` caches one region: `region`, ISO `fetchedAt`, subscription `providers`, `rent`, `buy`, and nullable TMDB watch-page `link`. Each provider has `id`, `name`, nullable `logoPath`, and `displayPriority`. `rent` and `buy` default to empty arrays when omitted, preserving version 1 compatibility with existing web and macOS files. Only subscription providers match My services badges; another region’s cache is hidden. Region and service preferences stay in localStorage, outside the interchange file. Streaming data is supplied by JustWatch through TMDB.
+
 ## Watch event
 
 `uid`, `watchedAt`, `season`, `episode`, `tmdbEpisodeId`, `batchId`. `uid` and `batchId` are UUIDs. A movie watch has `null` season and episode. Events belong to the title they're nested in.

@@ -1,3 +1,4 @@
+import { WatchProviderSettings } from "@/components/WatchProviderSettings";
 import Link from "next/link";
 import { buttonClass } from "@/components/ui/Button";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
@@ -15,6 +16,7 @@ export default function SettingsPage() {
           <p>System follows your device’s light or dark setting. Your choice is saved on this device.</p>
           <ThemeToggle />
         </section>
+        <WatchProviderSettings />
         <section className="section">
           <h2>Design system</h2>
           <p>Every shared component in light and dark, side by side.</p>
