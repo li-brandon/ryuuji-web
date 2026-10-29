@@ -3,8 +3,8 @@ import movie from "../test/fixtures/tmdb/movie-27205.json";
 import breakingBad from "../test/fixtures/tmdb/tv-1396.json";
 import breakingBadSeason1 from "../test/fixtures/tmdb/tv-1396-season-1.json";
 import frieren from "../test/fixtures/tmdb/tv-209867.json";
-import { applyMovie, applyShow, isAnime } from "./title-mapper";
-import type { Title } from "./types";
+import { applyMovie, applyShow, episodeMetadata, isAnime, showStatus, type TMDBSeason } from "./title-mapper";
+import { SHOW_STATUSES, type Title } from "./types";
 
 function title(overrides: Partial<Title> = {}): Title {
   return {
@@ -95,6 +95,32 @@ describe("applyShow", () => {
       showStatus: "Unknown",
       episodes: { schemaVersion: 1, seasons: [] },
     });
+  });
+});
+
+describe("showStatus", () => {
+  it("keeps the TMDB statuses the schema knows and maps the rest to Unknown, like macOS", () => {
+    for (const status of SHOW_STATUSES) expect(showStatus(status)).toBe(status);
+    for (const status of ["Something New", "", "ended", "Returning"]) expect(showStatus(status), status).toBe("Unknown");
+    expect(showStatus(null)).toBeNull();
+    expect(showStatus(undefined)).toBeNull();
+    expect(applyShow({ ...breakingBad, status: null }, [], title()).showStatus).toBeNull();
+  });
+});
+
+describe("episodeMetadata", () => {
+  const season = (season_number: number): TMDBSeason => ({
+    season_number,
+    episodes: [{ id: season_number * 10, season_number, episode_number: 1 }],
+  });
+
+  it("sorts seasons by number, specials first, without mutating the input", () => {
+    const input = [season(2), season(0), season(10), season(1)];
+    const { seasons } = episodeMetadata(input);
+    expect(seasons.map((s) => s.number)).toEqual([0, 1, 2, 10]);
+    expect(seasons.map((s) => s.name)).toEqual(["Specials", "Season 1", "Season 2", "Season 10"]);
+    expect(seasons[3].episodes[0]).toEqual({ tmdbId: 100, season: 10, number: 1, name: "Episode 1", airDate: null, runtime: null });
+    expect(input.map((s) => s.season_number)).toEqual([2, 0, 10, 1]);
   });
 });
 

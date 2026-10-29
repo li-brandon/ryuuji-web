@@ -1,9 +1,12 @@
 import "fake-indexeddb/auto";
 import { IDBObjectStore } from "fake-indexeddb";
 import { afterEach, expect, it, vi } from "vitest";
+import { show } from "../test/domain-fixtures";
 import fixture from "../test/fixtures/macos-library-export.json";
+import frieren from "../test/fixtures/tmdb/tv-209867.json";
 import { exportLibrary, previewImport, readLibraryFile } from "./library-import";
 import { LibraryRepository, openLibraryDB } from "./storage";
+import { applyShow } from "./title-mapper";
 import * as lock from "./watch-log-lock";
 
 const connections: Awaited<ReturnType<typeof openLibraryDB>>[] = [];
@@ -116,6 +119,21 @@ it.each([
   expect(await repo.getTitle(local)).toMatchObject({
     status: choices.status, score: choices.score ?? 7, notes: choices.notes.trim() ? choices.notes : "Local notes", name: "Local name",
   });
+});
+
+it("maps an unrecognized TMDB status to Unknown and round-trips it through export and import", async () => {
+  browserSettings();
+  const { repo } = await setup(); const { repo: restored } = await setup();
+  const mapped = applyShow({ ...frieren, status: "Some Future TMDB Status" }, [], show([]));
+  expect(mapped.showStatus).toBe("Unknown");
+  await repo.createTitle(mapped);
+  const backup = await exportLibrary(repo);
+  expect(backup.titles[0].showStatus).toBe("Unknown");
+  // The macOS exporter writes the same value, so its files import identically.
+  await restored.importLibrary(await previewImport(restored, JSON.stringify(backup)));
+  expect(await restored.getTitle(mapped)).toMatchObject({ showStatus: "Unknown" });
+  expect(await restored.librarySnapshot()).toEqual(await repo.librarySnapshot());
+  expect(await exportLibrary(restored, new Date(backup.exportedAt))).toEqual(backup);
 });
 
 function browserSettings() {

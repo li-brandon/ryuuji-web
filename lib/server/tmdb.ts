@@ -84,6 +84,8 @@ export async function proxyTMDB(segments: string[], search: URLSearchParams): Pr
   try {
     upstream = await fetch(`${BASE_URL}/${path}?${query}`, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      // Never follow redirects: the bearer token must only go to TMDB. A redirect becomes a 502.
+      redirect: "error",
       next: { revalidate: endpoint.revalidate },
     });
   } catch {

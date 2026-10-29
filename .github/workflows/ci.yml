@@ -30,7 +30,9 @@ jobs:
         env:
           TMDB_TOKEN: ryuuji-bundle-sentinel-tmdb
           RYUUJI_PASSCODE: ryuuji-bundle-sentinel-passcode
+          RYUUJI_SESSION_SECRET: ryuuji-bundle-sentinel-session-secret
       - run: npm run check:bundle
         env:
           TMDB_TOKEN: ryuuji-bundle-sentinel-tmdb
           RYUUJI_PASSCODE: ryuuji-bundle-sentinel-passcode
+          RYUUJI_SESSION_SECRET: ryuuji-bundle-sentinel-session-secret
