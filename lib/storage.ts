@@ -99,8 +99,16 @@ export class LibraryRepository {
     }
     const updated = { ...existing, ...metadata, metadataRevision: existing.metadataRevision + 1 };
     const store = tx.objectStore("watchEvents");
-    const events = remapEvents(await store.index("byTitle").getAll(keyOf(key)), titleEpisodes(updated));
-    for (const event of events) await store.put(event);
+    const originals = await store.index("byTitle").getAll(keyOf(key));
+    const events = remapEvents(originals, titleEpisodes(updated));
+    for (const [index, event] of events.entries()) {
+      const original = originals[index];
+      // Remapping preserves order and only changes these episode identity fields.
+      if (event.season !== original.season || event.episode !== original.episode ||
+          event.tmdbEpisodeId !== original.tmdbEpisodeId) {
+        await store.put(event);
+      }
+    }
     updated.status = statusAfterRefresh(updated, events, today);
     await titles.put(updated);
     await tx.done;

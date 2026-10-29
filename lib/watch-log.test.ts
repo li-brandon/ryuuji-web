@@ -674,7 +674,7 @@ describe("LIB-426 write hardening", () => {
   it("keeps the in-tab queue when Web Locks is missing", async () => {
     vi.stubGlobal("navigator", {});
     const show = await makeShow(F.season(1, 2));
-    await Promise.all([service.bulkMark(show, "all"), service.bulkMark(show, "all")]);
+    await Promise.all([service.bulkMark(show, "all"), new WatchLogService(repo, { today: () => F.today }).bulkMark(show, "all")]);
     expect(await events(show)).toHaveLength(2);
     expect(await status(show)).toBe("caughtUp");
   });

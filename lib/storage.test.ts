@@ -1,4 +1,5 @@
 import "fake-indexeddb/auto";
+import { IDBObjectStore } from "fake-indexeddb";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DuplicateTitleError,
@@ -146,14 +147,21 @@ it("stores new episode metadata and fills ID-less history together without losin
     const orphan = { ...watched, uid: "removed", tmdbEpisodeId: 999 };
     await repo.addWatchEvent(watched);
     await repo.addWatchEvent(orphan);
+    const put = vi.spyOn(IDBObjectStore.prototype, "put");
     const updated = await repo.applyMetadata(original, {
       episodes: { schemaVersion: 1, seasons: [{ number: 1, name: "Season 1", episodes: [
         { tmdbId: 12, season: 1, number: 2, name: "Episode", airDate: "2026-01-01", runtime: null },
       ] }] },
     }, "2026-06-15");
+    const eventWrites = put.mock.calls.filter(([value]) => value && typeof value === "object" && "uid" in value);
+    expect(eventWrites.map(([value]) => value)).toEqual([{ ...watched, tmdbEpisodeId: 12 }]);
+    put.mockClear();
+    await repo.applyMetadata(original, { episodes: updated.episodes }, "2026-06-15");
+    expect(put.mock.calls.filter(([value]) => value && typeof value === "object" && "uid" in value)).toEqual([]);
+    put.mockRestore();
     expect(updated.metadataRevision).toBe(1);
     expect(updated.status).toBe("completed");
-    expect(await repo.getTitle(original)).toEqual(updated);
+    expect(await repo.getTitle(original)).toEqual({ ...updated, metadataRevision: 2 });
     expect(await repo.listWatchEvents(original)).toEqual([{ ...watched, tmdbEpisodeId: 12 }, orphan]);
   } finally {
     db.close();

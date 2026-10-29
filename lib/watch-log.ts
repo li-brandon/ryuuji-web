@@ -15,6 +15,7 @@ import { statusAfter, type StatusTrigger } from "./status-engine";
 import { TitleNotFoundError, type LibraryRepository } from "./storage";
 import { LIST_STATUSES, type Kind, type ListStatus, type Title, type TitleKey, type WatchEvent } from "./types";
 import type { UndoStack } from "./undo-stack";
+import { withWatchLogLock } from "./watch-log-lock";
 
 // Ports the macOS app's Services/WatchLogService.swift.
 
@@ -56,14 +57,13 @@ export type WatchLogOptions = {
 /**
  * Owns every write that touches watch events or list status. Each public operation updates
  * status, saves in one transaction, and registers exactly one undo step on `undo` when given.
- * Operations keep an in-tab queue and acquire one cross-tab Web Lock before reading state.
+ * Operations share an in-tab queue with metadata refreshes and acquire one cross-tab Web Lock before reading state.
  * Browsers without Web Locks retain the in-tab queue.
  */
 export class WatchLogService {
   private readonly today: () => string;
   private readonly now: () => Date;
   private readonly newId: () => string;
-  private queue: Promise<unknown> = Promise.resolve();
 
   constructor(
     private readonly repo: LibraryRepository,
@@ -170,14 +170,7 @@ export class WatchLogService {
   // Core
 
   private run<T>(operation: () => Promise<T>): Promise<T> {
-    const result = this.queue.then(() => {
-      if (typeof navigator !== "undefined" && navigator.locks?.request) {
-        return navigator.locks.request("ryuuji-watch-log", operation);
-      }
-      return operation();
-    });
-    this.queue = result.catch(() => {});
-    return result;
+    return withWatchLogLock(operation);
   }
 
   private async load(key: TitleKey): Promise<{ title: Title; events: WatchEvent[] }> {
