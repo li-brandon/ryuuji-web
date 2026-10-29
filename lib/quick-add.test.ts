@@ -1,3 +1,4 @@
+import { titleProgress } from "./progress";
 import "fake-indexeddb/auto";
 import { describe, expect, it, vi } from "vitest";
 import movie from "../test/fixtures/tmdb/movie-27205.json";
@@ -216,12 +217,12 @@ describe("refreshTitle (LIB-415)", () => {
     await library.updateTitle(bb, { score: 5, notes: "before" });
     const inner = fetcher();
     const editing = vi.fn(async (...args: Parameters<Fetcher>) => {
-      await library.updateTitle(bb, { score: 8, notes: "typed during refresh" });
+      await library.updateTitle(bb, { score: 8, notes: "typed during refresh", status: "dropped" });
       return inner(...args);
     }) as unknown as Fetcher;
 
     const refreshed = await refreshTitle(library, bb, { fetcher: editing, now, today: "2026-10-29" });
-    expect(refreshed).toMatchObject({ score: 8, notes: "typed during refresh" });
+    expect(refreshed).toMatchObject({ score: 8, notes: "typed during refresh", status: "dropped" });
     expect(await library.getTitle(bb)).toMatchObject({ score: 8, notes: "typed during refresh" });
   });
 
@@ -231,6 +232,33 @@ describe("refreshTitle (LIB-415)", () => {
     await library.updateTitle(bb, { status: "caughtUp" });
     // Season 1 is aired and unwatched, so a Caught Up show goes back to Watching.
     expect((await refreshTitle(library, bb, { fetcher: fetcher(), now, today: "2026-10-29" })).status).toBe("watching");
+  });
+
+  it("remaps renumbered episodes and retains removed events through refresh", async () => {
+    const library = await repo();
+    const { title } = await addTitle(library, bb, "planToWatch", { fetcher: fetcher(), now });
+    const service = new WatchLogService(library, { today: () => "2026-10-29" });
+    await library.updateTitle(bb, { showStatus: "Returning Series" });
+    await service.bulkMark(title, "all");
+    const before = await library.listWatchEvents(bb);
+    const moved = breakingBadSeason1.episodes[0];
+    const refreshed = await refreshTitle(library, bb, {
+      now, today: "2026-10-29",
+      fetcher: fakeFetcher({
+        "tv/1396": { ...breakingBad, status: "Returning Series", seasons: [{ season_number: 2 }] },
+        "tv/1396?append_to_response=season%2F2": {
+          "season/2": { ...breakingBadSeason1, season_number: 2, episodes: [{ ...moved, season_number: 2, episode_number: 1 }] },
+        },
+      }),
+    });
+    const after = await library.listWatchEvents(bb);
+    expect(after).toHaveLength(before.length);
+    expect(after.find((e) => e.tmdbEpisodeId === moved.id)).toEqual({
+      ...before.find((e) => e.tmdbEpisodeId === moved.id), season: 2, episode: 1,
+    });
+    expect(after.filter((e) => e.tmdbEpisodeId !== moved.id)).toEqual(before.filter((e) => e.tmdbEpisodeId !== moved.id));
+    expect(titleProgress(refreshed, after, "2026-10-29")).toMatchObject({ remaining: 0, orphanCount: before.length - 1 });
+    expect(refreshed.status).toBe("caughtUp");
   });
 
   it("writes nothing when TMDB fails", async () => {

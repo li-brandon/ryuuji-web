@@ -133,3 +133,29 @@ describe("requestPersistentStorage", () => {
     expect(await requestPersistentStorage()).toBe(false);
   });
 });
+
+it("stores new episode metadata and fills ID-less history together without losing orphans", async () => {
+  const db = await openLibraryDB(`metadata-${dbCount++}`);
+  try {
+    const repo = new LibraryRepository(db);
+    const original = await repo.createTitle(title({ status: "watching" }));
+    const watched: WatchEvent = {
+      uid: "idless", tmdbId: original.tmdbId, kind: "show", season: 1, episode: 2,
+      tmdbEpisodeId: null, watchedAt: "2026-01-01T00:00:00Z", batchId: "original",
+    };
+    const orphan = { ...watched, uid: "removed", tmdbEpisodeId: 999 };
+    await repo.addWatchEvent(watched);
+    await repo.addWatchEvent(orphan);
+    const updated = await repo.applyMetadata(original, {
+      episodes: { schemaVersion: 1, seasons: [{ number: 1, name: "Season 1", episodes: [
+        { tmdbId: 12, season: 1, number: 2, name: "Episode", airDate: "2026-01-01", runtime: null },
+      ] }] },
+    }, "2026-06-15");
+    expect(updated.metadataRevision).toBe(1);
+    expect(updated.status).toBe("completed");
+    expect(await repo.getTitle(original)).toEqual(updated);
+    expect(await repo.listWatchEvents(original)).toEqual([{ ...watched, tmdbEpisodeId: 12 }, orphan]);
+  } finally {
+    db.close();
+  }
+});

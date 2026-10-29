@@ -1,7 +1,9 @@
+import type { WatchEvent } from "./types";
 import { describe, expect, it } from "vitest";
 import { episode as e, event, future, movieEvent, past, season, today } from "../test/domain-fixtures";
 import { isAired, today as todayString } from "./air-date";
 import {
+  remapEvents,
   computeProgress,
   hasAiredRegular,
   isWatched,
@@ -159,5 +161,44 @@ describe("rewatchProgress", () => {
     expect(rewatchCount(progress, episodes[0])).toBe(2);
     expect(rewatchCount(progress, episodes[1])).toBe(0);
     expect(progress.remaining).toBe(1);
+  });
+});
+
+describe("renumbering history", () => {
+  const watched = (episode: Episode): WatchEvent => ({
+    ...event(episode), uid: "watch", tmdbId: 1, kind: "show", watchedAt: "2026-01-01T12:00:00Z", batchId: "batch",
+  });
+
+  it("moves an event by stable ID even when another episode takes its old number", () => {
+    const original = e(1, 13);
+    const moved = { ...original, season: 2, number: 1 };
+    const events = [watched(original)];
+    expect(remapEvents(events, [{ ...e(1, 13), tmdbId: 999 }, moved])).toEqual([{ ...events[0], season: 2, episode: 1 }]);
+    expect(events[0].season).toBe(1);
+  });
+
+  it("keeps removed episodes untouched even when their number is reused", () => {
+    const original = watched(e(1, 3));
+    const replacement = { ...e(1, 3), tmdbId: 999 };
+    expect(remapEvents([original], [replacement])).toEqual([original]);
+    expect(computeProgress([replacement], [original], today).orphanCount).toBe(1);
+  });
+
+  it("fills an ID only for an ID-less event with matching numbers", () => {
+    const episode = e(1, 2);
+    const original = { ...watched(episode), tmdbEpisodeId: null };
+    expect(remapEvents([original], [episode])).toEqual([{ ...original, tmdbEpisodeId: episode.tmdbId }]);
+    expect(remapEvents([original], [e(2, 2)])).toEqual([original]);
+    expect(remapEvents([{ ...original, season: null }], [episode])).toEqual([{ ...original, season: null }]);
+  });
+
+  it("orders progress and rewatch episodes by season then number regardless of input order", () => {
+    const episodes = [e(2, 2), e(1, 3), e(2, 1), e(1, 1), e(1, 2)];
+    const ordered = [e(1, 1), e(1, 2), e(1, 3), e(2, 1), e(2, 2)];
+    const p = computeProgress(episodes, [...episodes].reverse().map(event), today);
+    expect(p.airedRegular).toEqual(ordered);
+    expect(rewatchProgress(p)?.episodes).toEqual(ordered);
+    expect(rewatchProgress(p)?.next).toEqual(ordered[0]);
+    expect(computeProgress(episodes, [event(e(1, 1))], today).next).toEqual(e(1, 2));
   });
 });

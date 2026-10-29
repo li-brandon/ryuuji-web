@@ -56,7 +56,8 @@ export type WatchLogOptions = {
 /**
  * Owns every write that touches watch events or list status. Each public operation updates
  * status, saves in one transaction, and registers exactly one undo step on `undo` when given.
- * Operations run one at a time so each sees the previous one's writes.
+ * Operations keep an in-tab queue and acquire one cross-tab Web Lock before reading state.
+ * Browsers without Web Locks retain the in-tab queue.
  */
 export class WatchLogService {
   private readonly today: () => string;
@@ -169,7 +170,12 @@ export class WatchLogService {
   // Core
 
   private run<T>(operation: () => Promise<T>): Promise<T> {
-    const result = this.queue.then(operation);
+    const result = this.queue.then(() => {
+      if (typeof navigator !== "undefined" && navigator.locks?.request) {
+        return navigator.locks.request("ryuuji-watch-log", operation);
+      }
+      return operation();
+    });
     this.queue = result.catch(() => {});
     return result;
   }

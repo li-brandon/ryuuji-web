@@ -141,3 +141,11 @@ describe("statusAfterRefresh", () => {
     expect(statusAfterRefresh(refreshed, watched(original), today)).toBe("onHold");
   });
 });
+
+it.each(["Ended", "Returning Series"] as const)("requires aired episodes before deriving completion for %s", (showStatus) => {
+  for (const trigger of ["log", "refresh", "endRewatch"] as const) {
+    expect(statusAfter(trigger, {
+      current: "watching", kind: "show", progress: computeProgress([], [], today), showStatus,
+    })).toBe("watching");
+  }
+});

@@ -1,7 +1,6 @@
 import { fetchWatchProviders, refreshWatchProviders } from "./watch-provider-client";
 import { readWatchPreferences } from "./watch-preferences";
 import { today as localToday } from "./air-date";
-import { statusAfterRefresh } from "./status-engine";
 import { DuplicateTitleError, TitleNotFoundError, type LibraryRepository } from "./storage";
 import { applyMovie, applyShow, isAnime, type TMDBMovie, type TMDBSeason, type TMDBShow } from "./title-mapper";
 import { tmdbFetch } from "./tmdb-client";
@@ -145,12 +144,9 @@ export async function refreshTitle(
   const metadata = {
     ...Object.fromEntries(METADATA_FIELDS.map((field) => [field, fetched[field]])),
     ...(providerData && readWatchPreferences().region === region ? { providerData } : {}),
-    metadataRevision: title.metadataRevision + 1,
     lastRefreshedAt: now.toISOString(),
   };
-  const status = statusAfterRefresh({ ...title, ...metadata }, await repo.listWatchEvents(key), today);
-  // Only metadata and status: score and notes may have been edited while fetching.
-  return repo.updateTitle(key, { ...metadata, status });
+  return repo.applyMetadata(key, metadata, today);
 }
 
 export type AddOutcome = { outcome: "added" | "existing"; title: Title };

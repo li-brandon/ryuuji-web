@@ -1,3 +1,5 @@
+import { remapEvents, titleEpisodes } from "./progress";
+import { statusAfterRefresh } from "./status-engine";
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { Kind, ListStatus, Title, TitleKey, WatchEvent } from "./types";
 
@@ -74,6 +76,33 @@ export class LibraryRepository {
     }
     const updated = { ...existing, ...changes, tmdbId: existing.tmdbId, kind: existing.kind };
     await tx.store.put(updated);
+    await tx.done;
+    return updated;
+  }
+
+  /** Saves metadata, remaps history, and derives status from the latest state in one transaction. */
+  async applyMetadata(
+    key: TitleKey,
+    metadata: Partial<Pick<Title,
+      "name" | "originalName" | "overview" | "posterPath" | "releaseDate" | "genres" | "originCountries" |
+      "originalLanguage" | "runtime" | "isAnime" | "showStatus" | "episodes" | "providerData" | "lastRefreshedAt"
+    >>,
+    today: string,
+  ): Promise<Title> {
+    const tx = this.db.transaction(["titles", "watchEvents"], "readwrite");
+    const titles = tx.objectStore("titles");
+    const existing = await titles.get(keyOf(key));
+    if (!existing) {
+      tx.abort();
+      await tx.done.catch(() => {});
+      throw new TitleNotFoundError(key);
+    }
+    const updated = { ...existing, ...metadata, metadataRevision: existing.metadataRevision + 1 };
+    const store = tx.objectStore("watchEvents");
+    const events = remapEvents(await store.index("byTitle").getAll(keyOf(key)), titleEpisodes(updated));
+    for (const event of events) await store.put(event);
+    updated.status = statusAfterRefresh(updated, events, today);
+    await titles.put(updated);
     await tx.done;
     return updated;
   }

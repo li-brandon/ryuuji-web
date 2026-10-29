@@ -61,3 +61,25 @@ describe("Up Next", () => {
     } finally { db.close(); }
   });
 });
+
+it("selects next in episode order and sorts both lists by the latest of unsorted events", () => {
+  const episodes = [F.episode(2, 2), F.episode(1, 2), F.episode(2, 1), F.episode(1, 1)];
+  const a = F.show(episodes, "watching");
+  const b = F.show(episodes, "watching");
+  const c = F.show([], "caughtUp");
+  const d = F.show([], "caughtUp");
+  const watches = (title: Title, recent: string) => [
+    ...eventsFor(title, [F.episode(1, 1)], "2026-01-01T00:00:00Z"),
+    ...eventsFor(title, [F.episode(1, 1)], recent),
+    ...eventsFor(title, [F.episode(1, 1)], "2026-02-01T00:00:00Z"),
+  ];
+  const result = selectUpNext([
+    { title: a, events: watches(a, "2026-06-10T00:00:00Z") },
+    { title: b, events: watches(b, "2026-06-12T00:00:00Z") },
+    { title: c, events: watches(c, "2026-06-10T00:00:00Z") },
+    { title: d, events: watches(d, "2026-06-12T00:00:00Z") },
+  ], F.today);
+  expect(result.active.map((entry) => entry.title)).toEqual([b, a]);
+  expect(result.active.map((entry) => entry.next)).toEqual([F.episode(1, 2), F.episode(1, 2)]);
+  expect(result.caughtUp.map((entry) => entry.title)).toEqual([d, c]);
+});
