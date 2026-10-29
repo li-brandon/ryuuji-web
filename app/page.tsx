@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { WatchProviderBadges, JustWatchAttribution } from "@/components/WatchProviders";
 import { QuickAddButton } from "@/components/QuickAdd";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -102,16 +103,17 @@ export default function UpNextPage() {
               const code = `S${entry.next.season}E${entry.next.number}`;
               return <ListRow key={entry.title.tmdbId} leading={<Poster src={entry.title.posterPath ? `https://image.tmdb.org/t/p/w92${entry.title.posterPath}` : null} small />}
                 title={entry.title.name}
-                subtitle={<span key={code} className={styles.episode}>{code} · {entry.next.name}<span className={styles.meta}><StatusPill status={entry.title.status} /> {entry.remaining} left{entry.rewatchNumber !== null && ` in rewatch #${entry.rewatchNumber}`}</span></span>}
+                subtitle={<span key={code} className={styles.episode}>{code} · {entry.next.name}<span className={styles.meta}><StatusPill status={entry.title.status} /> {entry.remaining} left{entry.rewatchNumber !== null && ` in rewatch #${entry.rewatchNumber}`}</span><WatchProviderBadges title={entry.title} /></span>}
                 trailing={<Button icon="plus" size="lg" variant="ghost" disabled={busy} aria-label={`Log ${code} of ${entry.title.name}`} onClick={() => void log(entry)} />} />;
             })}
           </ul>}
           {entries.caughtUp.length > 0 && <section className={styles.caughtUp} aria-labelledby="caught-up"><h2 id="caught-up">Caught up</h2><ul className={styles.list}>
-            {entries.caughtUp.map(({ title, airDate }) => <ListRow key={title.tmdbId} title={title.name} subtitle={airDate ? `Next episode ${new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" }).format(new Date(`${airDate}T12:00:00`))}` : "Waiting for the next episode"} trailing={<StatusPill status="caughtUp" />} />)}
+            {entries.caughtUp.map(({ title, airDate }) => <ListRow key={title.tmdbId} title={title.name} subtitle={<span>{airDate ? `Next episode ${new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" }).format(new Date(`${airDate}T12:00:00`))}` : "Waiting for the next episode"}<WatchProviderBadges title={title} /></span>} trailing={<StatusPill status="caughtUp" />} />)}
           </ul></section>}
           {!entries.active.length && !entries.caughtUp.length && <EmptyState icon="upNext" title="Nothing up next yet" action={<QuickAddButton>Find something to watch</QuickAddButton>}>Add a show and its next episode lands here, ready to log in one tap. Press ⌘K or Ctrl-K to search anywhere.</EmptyState>}
         </>
       )}
+      <JustWatchAttribution />
     </>
   );
 }

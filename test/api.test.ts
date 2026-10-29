@@ -88,6 +88,9 @@ describe("GET /api/tmdb/[...path]", () => {
       "discover/tv?with_genres=16&with_origin_country=JP&first_air_date.gte=2026-10-01&sort_by=popularity.desc",
       "movie/27205/watch/providers",
       "tv/1396/watch/providers",
+      "watch/providers/regions?language=en-US",
+      "watch/providers/movie?watch_region=US&language=en-US",
+      "watch/providers/tv?watch_region=JP&language=ja-JP",
       "configuration",
     ]) {
       expect((await get(path, { cookie })).status, path).toBe(200);
@@ -97,7 +100,7 @@ describe("GET /api/tmdb/[...path]", () => {
 
   it("404s anything off the allow-list", async () => {
     const cookie = await sessionCookie();
-    for (const path of ["search/multi?query=x", "movie/abc", "person/1", "tv/1/season/1/episode/1", "authentication", "movie/1/credits"]) {
+    for (const path of ["search/multi?query=x", "movie/abc", "person/1", "tv/1/season/1/episode/1", "authentication", "movie/1/credits", "watch/providers/person", "watch/providers/movie/1", "watch/providers/regions/US"]) {
       expect((await get(path, { cookie })).status, path).toBe(404);
     }
     expect(fetchMock).not.toHaveBeenCalled();
@@ -113,6 +116,12 @@ describe("GET /api/tmdb/[...path]", () => {
       "tv/1?append_to_response=credits",
       "discover/tv?with_genres=abc",
       "configuration?language=en-US",
+      "watch/providers/movie?watch_region=us",
+      "watch/providers/tv?watch_region=USA",
+      "watch/providers/tv?watch_region=US&watch_region=JP",
+      "watch/providers/regions?watch_region=US",
+      "watch/providers/movie?language=english",
+      "watch/providers/movie?api_key=x",
     ]) {
       expect((await get(path, { cookie })).status, path).toBe(400);
     }

@@ -50,19 +50,23 @@ export const episodeMetadataSchema = z.object({
   ),
 });
 
+export const providerInfoSchema = z.object({
+  id: z.int(),
+  name: z.string(),
+  logoPath: opt(z.string()),
+  displayPriority: z.int(),
+});
+
 export const watchProviderDataSchema = z.object({
   region: z.string(),
   fetchedAt: isoDateTime,
-  providers: z.array(
-    z.object({
-      id: z.int(),
-      name: z.string(),
-      logoPath: opt(z.string()),
-      displayPriority: z.int(),
-    }),
-  ),
+  /** Subscription streaming only; used for My services badges. */
+  providers: z.array(providerInfoSchema),
+  rent: z.array(providerInfoSchema).default([]),
+  buy: z.array(providerInfoSchema).default([]),
   link: opt(z.string()),
 });
+export type ProviderInfo = z.infer<typeof providerInfoSchema>;
 
 export const titleSchema = z.object({
   tmdbId: z.int(),

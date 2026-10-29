@@ -1,5 +1,6 @@
 "use client";
 
+import { WhereToWatch } from "@/components/WatchProviders";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
@@ -179,6 +180,8 @@ export function TitleDetail({ titleKey }: { titleKey: TitleKey }) {
         </div>
         {title.overview && <p className={styles.overview}>{title.overview}</p>}
       </header>
+
+      <WhereToWatch key={`${title.kind}-${title.tmdbId}`} title={title} />
 
       <Notes key={`notes-${title.kind}-${title.tmdbId}`} title={title} />
 

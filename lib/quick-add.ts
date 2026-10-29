@@ -1,3 +1,5 @@
+import { fetchWatchProviders, refreshWatchProviders } from "./watch-provider-client";
+import { readWatchPreferences } from "./watch-preferences";
 import { today as localToday } from "./air-date";
 import { statusAfterRefresh } from "./status-engine";
 import { DuplicateTitleError, TitleNotFoundError, type LibraryRepository } from "./storage";
@@ -135,9 +137,14 @@ export async function refreshTitle(
 ): Promise<Title> {
   const title = await repo.getTitle(key);
   if (!title) throw new TitleNotFoundError(key);
-  const fetched = await fetchMetadata(title, fetcher);
+  const region = readWatchPreferences().region;
+  const [fetched, providerData] = await Promise.all([
+    fetchMetadata(title, fetcher),
+    fetchWatchProviders(key, region, fetcher, now).catch(() => null),
+  ]);
   const metadata = {
     ...Object.fromEntries(METADATA_FIELDS.map((field) => [field, fetched[field]])),
+    ...(providerData && readWatchPreferences().region === region ? { providerData } : {}),
     metadataRevision: title.metadataRevision + 1,
     lastRefreshedAt: now.toISOString(),
   };
@@ -174,6 +181,7 @@ export async function addTitle(
     if (raced) return { outcome: "existing", title: raced };
     throw error;
   }
+  void refreshWatchProviders(repo, item, readWatchPreferences().region, options.fetcher, options.now).catch(() => {});
   if (status === created.status) return { outcome: "added", title: created };
   await watchLog.setStatus(item, status, undo);
   return { outcome: "added", title: (await repo.getTitle(item)) ?? created };
