@@ -26,6 +26,7 @@ Open http://localhost:3000.
 | `npm run typecheck` | TypeScript check (`tsc --noEmit`) |
 | `npm test`          | Unit tests (Vitest)               |
 | `npm run check:bundle` | Fail if server secrets appear in `.next/static` (run after `build`) |
+| `npm run smoke` | Post-deploy smoke test against `BASE_URL` with the passcode from `RYUUJI_SMOKE_PASSCODE` (see [docs/deploy.md](docs/deploy.md#4-post-deploy-smoke-test)). Not run in CI. |
 | `node scripts/screenshots.mjs [outDir]` | Layout screenshots (Up Next, Library, search, passcode prompt, `/components`) at 375px and 1280px in light and dark, with a mocked TMDB proxy; fails on horizontal scroll. Needs a running dev server (`BASE_URL`, default `http://localhost:3000`) and `npx playwright install chromium`. Not run in CI. |
 
 CI (`.github/workflows/ci.yml`) runs lint, typecheck, test, and build on every pull request and on pushes to `main`. The build uses sentinel `TMDB_TOKEN` / `RYUUJI_PASSCODE` / `RYUUJI_SESSION_SECRET` values, then `check:bundle` fails if those values or the variable names show up in client assets.
@@ -40,13 +41,32 @@ Tokens (spacing, radius, type, color, shadows, motion) live in `app/tokens.css`;
 | ------------ | ----------------------------------------------- |
 | `TMDB_TOKEN` | TMDB API read access token. **Server-side only.** |
 | `RYUUJI_PASSCODE` | Passcode that unlocks the TMDB proxy; at least 16 characters. **Server-side only.** |
-| `RYUUJI_SESSION_SECRET` | Key that signs session cookies; at least 32 random characters (e.g. `openssl rand -base64 32`). Required when `RYUUJI_PASSCODE` is set. **Server-side only.** |
+| `RYUUJI_SESSION_SECRET` | Key that signs session cookies; at least 32 random characters (e.g. `openssl rand -base64 48`). Required when `RYUUJI_PASSCODE` is set. **Server-side only.** |
 | `RYUUJI_SESSION_NOT_BEFORE` | Optional. Rejects sessions issued before this time: an ISO 8601 date-time (`2026-10-29T12:00:00Z`) or epoch seconds. |
 
 - The server refuses to start (`register()` in `instrumentation.ts` calls `readAccessConfig` from `lib/server/config.ts`) if `RYUUJI_PASSCODE` is set but shorter than 16 characters, `RYUUJI_SESSION_SECRET` is missing or shorter than 32, or `RYUUJI_SESSION_NOT_BEFORE` does not parse. The error names the variable, never its value. With `RYUUJI_PASSCODE` unset it starts with access disabled. Routes re-check per request and fail closed with `503`.
 - For local development, put them in `.env.local` (git-ignored). `.env.example` lists the required variables.
 - Never prefix them with `NEXT_PUBLIC_` — that would inline it into the client bundle.
 - Only read them from server code (modules under `lib/server/` import `server-only`) (Server Components, Route Handlers, Server Actions); never pass them to the browser or log them.
+
+## Deploy
+
+Live URL: TBD after first deploy.
+
+Hosted on Vercel from this repo: `main` deploys to production, pull requests get preview deployments, and CI must pass first. The full runbook (project setup, branch protection, env vars, smoke test, phone checks, rollback) is in [docs/deploy.md](docs/deploy.md).
+
+Set in Vercel for Production and Preview, marked Sensitive (see [Environment variables](#environment-variables)):
+
+- `TMDB_TOKEN`
+- `RYUUJI_PASSCODE` (at least 16 characters)
+- `RYUUJI_SESSION_SECRET` (at least 32 characters; `openssl rand -base64 48`)
+- `RYUUJI_SESSION_NOT_BEFORE` (optional)
+
+## Install and offline (PWA)
+
+- `app/manifest.ts` serves `/manifest.webmanifest` (standalone, start URL `/`). Icons are generated PNGs: `app/icon.tsx` (`/icon/192`, `/icon/512`), `app/maskable-icon/route.tsx` (maskable 512) and `app/apple-icon.tsx` (iOS home screen). Theme colors live in `lib/pwa.ts`, kept in sync with `app/tokens.css` by a test.
+- `public/sw.js` is registered by `components/ServiceWorker.tsx` in production builds only. It precaches the app shell (the top-level pages and the `/_next/static` assets they reference), serves navigations network first with the cached page or `/` as the offline fallback, and serves `/_next/static/*` cache first. It never intercepts or caches `/api/*`, so session cookies and TMDB responses are never stored. Library data comes from IndexedDB, so it is available offline. `lib/sw.test.ts` runs the worker in a sandbox.
+- `next.config.ts` serves `/sw.js` with `Cache-Control: no-cache` and `Service-Worker-Allowed: /`. Bump `VERSION` in `public/sw.js` to drop all caches.
 
 ## TMDB proxy
 
@@ -76,11 +96,11 @@ The app is single-user, so the proxy is gated by a passcode rather than accounts
 - The cookie is `v1.<issued-at, epoch seconds>.<signature>`, where the signature is an HMAC-SHA256 keyed by `RYUUJI_SESSION_SECRET` over the version, issued-at time and passcode. The proxy checks the signature with `timingSafeEqual`, then rejects sessions older than `SESSION_MAX_AGE` (30 days, enforced on the server whatever the browser keeps), issued more than a minute in the future, or issued before `RYUUJI_SESSION_NOT_BEFORE`. Without a valid cookie it returns `401`.
 - **Revoking sessions:** set `RYUUJI_SESSION_NOT_BEFORE` to the current time (e.g. `date -u +%Y-%m-%dT%H:%M:%SZ`) and redeploy to sign out every session issued before then. Rotating `RYUUJI_SESSION_SECRET` (or `RYUUJI_PASSCODE`) invalidates all existing sessions.
 - If `RYUUJI_PASSCODE` is unset or the access config is invalid, the proxy and login return `503 {"error":"Access not configured"}` (fail closed).
-- For the deployment (LIB-421), enable Vercel Deployment Protection as an additional layer in front of the passcode.
+- For the deployment, enable Vercel Deployment Protection as an additional layer in front of the passcode ([docs/deploy.md](docs/deploy.md)).
 
 ### TMDB terms
 
 - Ryuuji uses TMDB for non-commercial purposes only.
-- Attribution belongs to the UI (LIB-421): show the TMDB logo less prominently than the app's own branding, with the notice "This product uses the TMDB API but is not endorsed or certified by TMDB."
-- Watch provider data comes from JustWatch; any UI showing it (LIB-421) must credit JustWatch.
+- Attribution lives on `/about` (linked from Settings and the desktop sidebar): the TMDB logo, smaller than the app's own branding, with the notice "This product uses the TMDB API but is not endorsed or certified by TMDB."
+- Watch provider data comes from JustWatch; any UI showing it must credit JustWatch (`JustWatchAttribution`).
 - Do not cache TMDB data for more than 6 months.

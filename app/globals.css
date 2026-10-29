@@ -275,8 +275,25 @@ a {
   }
 
   .sidebar-footer {
-    display: block;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
     padding: 0 var(--space-1);
+  }
+
+  .sidebar-link {
+    display: flex;
+    align-items: center;
+    min-height: var(--tap);
+    padding: 0 var(--space-2);
+    border-radius: var(--radius);
+    color: var(--text-2);
+    font-size: var(--text-sm);
+    text-decoration: none;
+  }
+
+  .sidebar-link:hover {
+    color: var(--text);
   }
 
   .content {
