@@ -12,10 +12,23 @@ import {
 } from "./progress";
 import { statusAfter, type StatusTrigger } from "./status-engine";
 import { TitleNotFoundError, type LibraryRepository } from "./storage";
-import type { ListStatus, Title, TitleKey, WatchEvent } from "./types";
+import { LIST_STATUSES, type Kind, type ListStatus, type Title, type TitleKey, type WatchEvent } from "./types";
 import type { UndoStack } from "./undo-stack";
 
 // Ports the macOS app's Services/WatchLogService.swift.
+
+/** Statuses a user can pick by hand for `kind`. Rewatching is entered with Start Rewatch (as in
+ * Swift's `ListStatus.manualCases`); Caught Up means waiting on new episodes, so it's shows only. */
+export function allowedStatuses(kind: Kind): ListStatus[] {
+  return LIST_STATUSES.filter((s) => s !== "rewatching" && (kind === "show" || s !== "caughtUp"));
+}
+
+export class InvalidStatusError extends Error {
+  constructor(readonly kind: Kind, readonly status: ListStatus) {
+    super(`Status ${status} can't be set by hand on a ${kind}`);
+    this.name = "InvalidStatusError";
+  }
+}
 
 /** Which episodes a bulk mark covers: one season's aired, unwatched episodes (season 0 only if
  * chosen explicitly), or every aired, unwatched regular episode. */
@@ -79,10 +92,12 @@ export class WatchLogService {
   }
 
   /** Changes the list status by hand. Choosing Completed also fills in missing watches (see
-   * `complete`); either way it's one undo step that restores the previous status. */
+   * `complete`); either way it's one undo step that restores the previous status. Throws
+   * `InvalidStatusError` for a status `allowedStatuses` doesn't offer for the title's kind. */
   setStatus(key: TitleKey, status: ListStatus, undo?: UndoStack): Promise<void> {
     return this.run(async () => {
       const { title } = await this.load(key);
+      if (!allowedStatuses(title.kind).includes(status)) throw new InvalidStatusError(title.kind, status);
       if (status === title.status) return;
       if (status === "completed") return this.completeNow(key, undo);
       await this.perform("Change Status", key, null, undo, () => ({ added: [], removed: [], status }));

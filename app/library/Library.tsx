@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { QuickAddButton } from "@/components/QuickAdd";
 import { Button, buttonClass } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -17,7 +17,8 @@ import { libraryFiltersSchema, selectLibrary, type LibraryEntry } from "@/lib/li
 import { titleProgress } from "@/lib/progress";
 import { libraryRepository } from "@/lib/storage";
 import { LIST_STATUSES, type ListStatus, type Title } from "@/lib/types";
-import { WatchLogService } from "@/lib/watch-log";
+import { UndoStack } from "@/lib/undo-stack";
+import { allowedStatuses, WatchLogService } from "@/lib/watch-log";
 import styles from "./library.module.css";
 
 async function loadLibrary() {
@@ -34,12 +35,37 @@ export function Library() {
   const [selection, setSelection] = useState<{ title: Title; confirm: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
+  const undoStack = useRef(new UndoStack());
+  const service = useRef<WatchLogService | null>(null);
   const toast = useToast();
   useEffect(() => {
     let cancelled = false;
     void loadLibrary().then((entries) => { if (!cancelled) setLibrary(entries); }).catch(() => { if (!cancelled) setError(true); });
     return () => { cancelled = true; };
   }, []);
+  const undo = useCallback(async () => {
+    if (lock.current || !undoStack.current.canUndo) return;
+    lock.current = true;
+    setBusy(true);
+    try {
+      await undoStack.current.undo();
+      setLibrary(await loadLibrary());
+      toast({ message: "Status change undone" });
+    } catch { toast({ message: "Couldn't undo the status change. Please try again." }); }
+    finally { lock.current = false; setBusy(false); }
+  }, [toast]);
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.closest("input, textarea, select") || target.isContentEditable)) return;
+      if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "z" && undoStack.current.canUndo) {
+        event.preventDefault();
+        void undo();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [undo]);
   function filter(key: string, value: string) {
     const params = new URLSearchParams(query);
     params.set(key, value);
@@ -51,11 +77,12 @@ export function Library() {
     setBusy(true);
     try {
       const repo = await libraryRepository();
-      if (status) await new WatchLogService(repo).setStatus(selection.title, status);
+      service.current ??= new WatchLogService(repo);
+      if (status) await service.current.setStatus(selection.title, status, undoStack.current);
       else await repo.deleteTitle(selection.title);
       setLibrary(await loadLibrary());
       setSelection(null);
-      toast({ message: status ? "Status updated" : "Title and watch history removed" });
+      toast(status ? { message: "Status updated", actionLabel: "Undo", onAction: () => void undo() } : { message: "Title and watch history removed" });
     } catch { toast({ message: "Couldn't save changes. Please try again." }); }
     finally { lock.current = false; setBusy(false); }
   }
@@ -83,9 +110,9 @@ export function Library() {
       </section>)}
     </div>
     <Sheet open={selection !== null} label={selection?.confirm ? `Remove ${selection.title.name}?` : selection?.title.name ?? "Title actions"} title onClose={() => { if (!lock.current) setSelection(null); }}>
-      {selection && (selection.confirm ? <div className={styles.actions}><p>This removes the title and all its watch history. This cannot be undone.</p><Button disabled={busy} onClick={() => setSelection(null)}>Cancel</Button><Button variant="danger" disabled={busy} onClick={() => void change()}>Remove from library</Button></div> : <div className={styles.actions}>
+      {selection && (selection.confirm ? <div className={styles.actions}><p>This removes the title and all its watch history. This cannot be undone.</p><Button autoFocus disabled={busy} onClick={() => setSelection(null)}>Cancel</Button><Button variant="danger" disabled={busy} onClick={() => void change()}>Remove from library</Button></div> : <div className={styles.actions}>
         <Link className={buttonClass()} href={href(selection.title)}>Open detail</Link>
-        <p>Change status</p>{LIST_STATUSES.map((status) => <Button key={status} aria-current={selection.title.status === status ? "true" : undefined} disabled={busy || selection.title.status === status} onClick={() => void change(status)}>{selection.title.status === status && <span aria-hidden="true">✓ </span>}{STATUS_LABELS[status]}</Button>)}
+        <p>Change status</p>{LIST_STATUSES.filter((status) => status === selection.title.status || allowedStatuses(selection.title.kind).includes(status)).map((status) => <Button key={status} aria-current={selection.title.status === status ? "true" : undefined} disabled={busy || selection.title.status === status} onClick={() => void change(status)}>{selection.title.status === status && <span aria-hidden="true">✓ </span>}{STATUS_LABELS[status]}</Button>)}
         <Button variant="danger" disabled={busy} onClick={() => setSelection({ ...selection, confirm: true })}>Remove…</Button>
       </div>)}
     </Sheet>
