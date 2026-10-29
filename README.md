@@ -26,9 +26,13 @@ Open http://localhost:3000.
 | `npm run typecheck` | TypeScript check (`tsc --noEmit`) |
 | `npm test`          | Unit tests (Vitest)               |
 | `npm run check:bundle` | Fail if server secrets appear in `.next/static` (run after `build`) |
-| `node scripts/screenshots.mjs [outDir]` | Layout screenshots (375px + desktop) with a mocked TMDB proxy; needs a running dev server (`BASE_URL`, default `http://localhost:3000`) and `npx playwright install chromium`. Not run in CI. |
+| `node scripts/screenshots.mjs [outDir]` | Layout screenshots (Up Next, Library, search, passcode prompt, `/components`) at 375px and 1280px in light and dark, with a mocked TMDB proxy; fails on horizontal scroll. Needs a running dev server (`BASE_URL`, default `http://localhost:3000`) and `npx playwright install chromium`. Not run in CI. |
 
 CI (`.github/workflows/ci.yml`) runs lint, typecheck, test, and build on every pull request and on pushes to `main`. The build uses sentinel `TMDB_TOKEN` / `RYUUJI_PASSCODE` values, then `check:bundle` fails if those values or the variable names show up in client assets.
+
+## Design system
+
+Tokens (spacing, radius, type, color, shadows, motion) live in `app/tokens.css`; colors use `light-dark()`, so they follow the system theme or a pinned `data-theme`. Shared components are in `components/ui/` and shown in both themes at `/components`. The theme preference (System / Light / Dark, in Settings and the desktop sidebar) is stored in `localStorage` and applied by an inline script before first paint (`lib/theme.ts`). Fonts: Inter (text) and Fraunces (display) via `next/font`. All motion is disabled under `prefers-reduced-motion`.
 
 ## Environment variables
 

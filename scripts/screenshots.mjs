@@ -1,14 +1,18 @@
-// Layout proof for LIB-412: screenshots of the shell and quick-add panel with a mocked TMDB proxy.
-// Not run in CI. Usage: start `npm run dev` (no env needed), then
+// Layout proof: screenshots of the shell, quick-add panel and /components with a mocked TMDB proxy,
+// at phone and desktop sizes in light and dark. Fails on horizontal scroll. Not run in CI.
+// Usage: start `npm run dev` (no env needed), then
 //   BASE_URL=http://localhost:3000 node scripts/screenshots.mjs [outDir]
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { chromium } from "playwright";
 
 const BASE_URL = process.env.BASE_URL ?? "http://localhost:3000";
-const OUT = process.argv[2] ?? "/workspace/ryuuji-shots/412";
-const PHONE = { width: 375, height: 812 };
-const DESKTOP = { width: 1280, height: 800 };
+const OUT = process.argv[2] ?? "/workspace/ryuuji-shots/423";
+const VIEWPORTS = {
+  375: { viewport: { width: 375, height: 812 }, hasTouch: true, isMobile: true },
+  1280: { viewport: { width: 1280, height: 800 } },
+};
+const SCHEMES = ["light", "dark"];
 
 const fixtures = {
   "search/movie": {
@@ -37,7 +41,7 @@ const fixtures = {
 };
 
 const poster = (color) =>
-  `<svg xmlns="http://www.w3.org/2000/svg" width="92" height="138"><rect width="92" height="138" fill="${color}"/></svg>`;
+  `<svg xmlns="http://www.w3.org/2000/svg" width="92" height="138"><defs><linearGradient id="g" x2="0" y2="1"><stop offset="0" stop-color="${color}"/><stop offset="1" stop-color="#1b2433"/></linearGradient></defs><rect width="92" height="138" fill="url(#g)"/></svg>`;
 
 /** Mocks the proxy and TMDB images. With `locked`, /api/tmdb is 401 until /api/session succeeds. */
 async function mock(page, { locked = false } = {}) {
@@ -70,73 +74,75 @@ async function assertNoHorizontalScroll(page, label) {
     width: window.innerWidth,
   }));
   if (scrollWidth > width) throw new Error(`${label}: horizontal scroll (scrollWidth ${scrollWidth} > ${width})`);
-  console.log(`ok   ${label}: scrollWidth ${scrollWidth} <= ${width}`);
 }
 
-async function shot(page, name, { checkScroll = true } = {}) {
-  if (checkScroll) await assertNoHorizontalScroll(page, name);
-  await page.screenshot({ path: join(OUT, `${name}.png`) });
-  console.log(`saved ${name}.png`);
+async function shot(page, name, { fullPage = false } = {}) {
+  await assertNoHorizontalScroll(page, name);
+  // Let entrance transitions settle.
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: join(OUT, `${name}.png`), fullPage });
+  console.log(`ok   ${name}.png (no horizontal scroll)`);
 }
 
 async function openSearch(page, query) {
-  await page.keyboard.press("ControlOrMeta+k");
+  await page.getByRole("button", { name: /Search/ }).first().click();
   const input = page.getByRole("combobox", { name: "Search movies and shows" });
   await input.waitFor();
   await input.fill(query);
   return input;
 }
 
+async function newPage(browser, width, colorScheme, mockOptions) {
+  const page = await browser.newPage({ ...VIEWPORTS[width], colorScheme });
+  await mock(page, mockOptions);
+  return page;
+}
+
+async function goto(page, path) {
+  const response = await page.goto(BASE_URL + path, { waitUntil: "networkidle" });
+  await page.getByRole("heading", { level: 1 }).first().waitFor();
+  return response;
+}
+
 mkdirSync(OUT, { recursive: true });
 const browser = await chromium.launch();
 try {
-  const phone = await browser.newPage({ viewport: PHONE, hasTouch: true, isMobile: true });
-  await mock(phone);
-  for (const [path, name] of [
-    ["/", "up-next"],
-    ["/library", "library"],
-    ["/settings", "settings"],
-  ]) {
-    await phone.goto(BASE_URL + path, { waitUntil: "networkidle" });
-    await phone.getByRole("heading", { level: 1 }).waitFor();
-    await shot(phone, name);
+  for (const width of Object.keys(VIEWPORTS)) {
+    for (const scheme of SCHEMES) {
+      const tag = `${width}-${scheme}`;
+      const page = await newPage(browser, width, scheme);
+      await goto(page, "/");
+      await shot(page, `up-next-${tag}`);
+      await goto(page, "/library");
+      await shot(page, `library-${tag}`);
+
+      // Search, move the selection, then add the first result with Return.
+      const input = await openSearch(page, "in");
+      await page.getByRole("option").first().waitFor();
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("ArrowUp");
+      await input.press("Enter");
+      await page.getByRole("option", { name: /Inception/ }).getByText("Added").waitFor();
+      await shot(page, `search-${tag}`);
+      await page.keyboard.press("Escape");
+      await page.getByRole("dialog").waitFor({ state: "hidden" });
+
+      if ((await goto(page, "/components").catch(() => null))?.ok()) await shot(page, `components-${tag}`, { fullPage: true });
+      await page.close();
+
+      const locked = await newPage(browser, width, scheme, { locked: true });
+      await goto(locked, "/");
+      await openSearch(locked, "frieren");
+      const passcode = locked.getByLabel("Enter the passcode to search TMDB");
+      await passcode.waitFor();
+      await shot(locked, `passcode-${tag}`);
+      await passcode.fill("hunter2");
+      await locked.getByRole("button", { name: "Unlock" }).click();
+      await locked.getByRole("option").first().waitFor();
+      await locked.close();
+    }
   }
-
-  // Search via the visible button (phones), then add the first result with Return.
-  await phone.goto(BASE_URL + "/", { waitUntil: "networkidle" });
-  await phone.getByRole("button", { name: /Search/ }).tap();
-  const input = phone.getByRole("combobox");
-  await input.fill("in");
-  await phone.getByRole("option").first().waitFor();
-  await phone.keyboard.press("ArrowDown");
-  await phone.keyboard.press("ArrowUp");
-  await input.press("Enter");
-  await phone.getByRole("option", { name: /Inception/ }).getByText("Added").waitFor();
-  await shot(phone, "search-results-added");
-
-  // Escape closes the panel.
-  await phone.keyboard.press("Escape");
-  await phone.getByRole("dialog").waitFor({ state: "hidden" });
-
-  const locked = await browser.newPage({ viewport: PHONE, hasTouch: true, isMobile: true });
-  await mock(locked, { locked: true });
-  await locked.goto(BASE_URL + "/", { waitUntil: "networkidle" });
-  await locked.getByRole("heading", { level: 1 }).waitFor();
-  await openSearch(locked, "frieren");
-  await locked.getByLabel("Enter the passcode to search TMDB").waitFor();
-  await shot(locked, "passcode-prompt");
-  await locked.getByLabel("Enter the passcode to search TMDB").fill("hunter2");
-  await locked.getByRole("button", { name: "Unlock" }).click();
-  await locked.getByRole("option").first().waitFor();
   console.log("ok   passcode unlock retried the search");
-
-  const desktop = await browser.newPage({ viewport: DESKTOP });
-  await mock(desktop);
-  await desktop.goto(BASE_URL + "/library", { waitUntil: "networkidle" });
-  await desktop.getByRole("heading", { level: 1 }).waitFor();
-  await openSearch(desktop, "in");
-  await desktop.getByRole("option").first().waitFor();
-  await shot(desktop, "desktop-search");
 } finally {
   await browser.close();
 }
