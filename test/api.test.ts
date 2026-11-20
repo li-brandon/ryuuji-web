@@ -148,6 +148,7 @@ describe("session cookie", () => {
 
   it.each([
     ["ISO", "2026-10-15T00:00:00Z"],
+    ["ISO with offset", "2026-10-15T02:00:00+02:00"],
     ["epoch seconds", String(Date.parse("2026-10-15T00:00:00Z") / 1000)],
   ])("is revoked when issued before RYUUJI_SESSION_NOT_BEFORE (%s)", async (_format, notBefore) => {
     const old = await cookieIssuedAt(issuedAt);
@@ -157,11 +158,14 @@ describe("session cookie", () => {
     expect((await get("movie/27205", { cookie: fresh })).status).toBe(200);
   });
 
-  it("fails closed on an unparseable RYUUJI_SESSION_NOT_BEFORE", async () => {
-    const cookie = await sessionCookie();
-    vi.stubEnv("RYUUJI_SESSION_NOT_BEFORE", "yesterday");
-    expect((await get("movie/27205", { cookie })).status).toBe(503);
-  });
+  it.each(["yesterday", "2026-10-15T00:00:00", "2026-10-15"])(
+    "fails closed on an unparseable or timezone-less RYUUJI_SESSION_NOT_BEFORE (%s)",
+    async (notBefore) => {
+      const cookie = await sessionCookie();
+      vi.stubEnv("RYUUJI_SESSION_NOT_BEFORE", notBefore);
+      expect((await get("movie/27205", { cookie })).status).toBe(503);
+    },
+  );
 });
 
 describe("GET /api/tmdb/[...path]", () => {

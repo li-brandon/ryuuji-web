@@ -20,11 +20,12 @@ export class AccessConfigError extends Error {
   }
 }
 
-/** Epoch seconds from an ISO 8601 date-time or an epoch value (seconds), else NaN. */
+/** Epoch seconds from an ISO 8601 date-time with a timezone or an epoch value (seconds), else NaN. */
 function parseNotBefore(value: string): number {
   if (/^\d{1,12}$/.test(value)) return Number(value);
-  // Date-only strings would parse as UTC midnight; require a full date-time.
-  if (!/^\d{4}-\d{2}-\d{2}T/.test(value)) return NaN;
+  // Date-only strings parse as UTC midnight and offset-less date-times as server-local time;
+  // require a full date-time with `Z` or `±HH:MM` so the instant is unambiguous.
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?(Z|[+-]\d{2}:\d{2})$/.test(value)) return NaN;
   return Math.floor(Date.parse(value) / 1000);
 }
 
@@ -48,9 +49,30 @@ export function readAccessConfig(env: Record<string, string | undefined> = proce
   const rawNotBefore = env.RYUUJI_SESSION_NOT_BEFORE?.trim();
   const notBefore = rawNotBefore ? parseNotBefore(rawNotBefore) : 0;
   if (!Number.isFinite(notBefore)) {
-    throw new AccessConfigError("RYUUJI_SESSION_NOT_BEFORE must be an ISO 8601 date-time or epoch seconds");
+    throw new AccessConfigError(
+      "RYUUJI_SESSION_NOT_BEFORE must be an ISO 8601 date-time with a timezone (Z or ±HH:MM) or epoch seconds",
+    );
   }
   return { passcode, secret, notBefore };
+}
+
+/**
+ * Startup check for the Node.js server: on an invalid access config, logs one line naming the
+ * variable (never its value) and calls `exit(1)` so the process stops instead of serving 503s.
+ * Other errors propagate.
+ */
+export function exitOnInvalidAccessConfig(
+  exit: (code: number) => void,
+  log: (line: string) => void = console.error,
+  env: Record<string, string | undefined> = process.env,
+): void {
+  try {
+    readAccessConfig(env);
+  } catch (error) {
+    if (!(error instanceof AccessConfigError)) throw error;
+    log(`Invalid server config, refusing to start: ${error.message}`);
+    exit(1);
+  }
 }
 
 /** `readAccessConfig`, with an invalid config reported as null so callers fail closed. */

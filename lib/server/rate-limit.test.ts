@@ -17,6 +17,10 @@ describe("createRateLimiter", () => {
     expect(check("a", 1_000)).toBeNull();
   });
 
+  it("pins MAX_RATE_LIMIT_KEYS at 10,000", () => {
+    expect(MAX_RATE_LIMIT_KEYS).toBe(10_000);
+  });
+
   it("defaults the key cap to MAX_RATE_LIMIT_KEYS", () => {
     const check = createRateLimiter(1, 60_000);
     for (let i = 0; i <= MAX_RATE_LIMIT_KEYS; i++) check(`k${i}`, 0);
