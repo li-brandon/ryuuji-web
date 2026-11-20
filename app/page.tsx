@@ -13,8 +13,10 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { useToast } from "@/components/ui/Toast";
 import { today } from "@/lib/air-date";
 import { libraryRepository } from "@/lib/storage";
-import { UndoStack } from "@/lib/undo-stack";
+import type { TitleKey } from "@/lib/types";
+import { UndoStack, type UndoHandle } from "@/lib/undo-stack";
 import { selectUpNext, type UpNextEntry } from "@/lib/up-next";
+import { focusAfterLog, logButtonLabel, logEntry, shouldRestoreFocus, undoLog, watchToday } from "@/lib/up-next-page";
 import { WatchLogService } from "@/lib/watch-log";
 import styles from "./up-next.module.css";
 
@@ -30,6 +32,9 @@ export default function UpNextPage() {
   const lock = useRef(false);
   const undoStack = useRef(new UndoStack());
   const service = useRef<WatchLogService | null>(null);
+  const list = useRef<HTMLUListElement>(null);
+  const pendingFocus = useRef<{ key: TitleKey; origin: Element | null } | null>(null);
+  const [day, setDay] = useState(today);
   const toast = useToast();
   const refresh = useCallback(async () => setLibrary(await loadLibrary()), []);
 
@@ -44,13 +49,14 @@ export default function UpNextPage() {
   }, []);
 
   useLibraryChanges(refresh);
+  useEffect(() => watchToday(setDay), []);
 
-  const undo = useCallback(async () => {
-    if (lock.current || !undoStack.current.canUndo) return;
+  const undo = useCallback(async (step?: UndoHandle) => {
+    if (lock.current || !(step ?? undoStack.current).canUndo) return;
     lock.current = true;
     setBusy(true);
     try {
-      await undoStack.current.undo();
+      if (!(await undoLog(undoStack.current, step))) return;
       await refresh();
       toast({ message: "Log undone" });
     } catch {
@@ -77,12 +83,15 @@ export default function UpNextPage() {
   async function log(entry: UpNextEntry) {
     if (lock.current) return;
     lock.current = true;
+    const origin = document.activeElement;
     setBusy(true);
     try {
       service.current ??= new WatchLogService(await libraryRepository());
-      await service.current.log(entry.title, entry.next, undoStack.current);
+      const step = await logEntry(service.current, entry, undoStack.current);
       await refresh();
-      toast({ message: `Logged S${entry.next.season}E${entry.next.number} of ${entry.title.name}`, actionLabel: "Undo", onAction: () => void undo() });
+      const message = `Logged S${entry.next.season}E${entry.next.number} of ${entry.title.name}`;
+      toast(step ? { message, actionLabel: "Undo", onAction: () => void undo(step) } : { message });
+      pendingFocus.current = { key: entry.title, origin };
     } catch {
       toast({ message: "Couldn't save the log. Please try again." });
     } finally {
@@ -91,7 +100,20 @@ export default function UpNextPage() {
     }
   }
 
-  const entries = selectUpNext(library ?? [], today());
+  const entries = selectUpNext(library ?? [], day);
+
+  useEffect(() => {
+    const pending = pendingFocus.current;
+    if (busy || !pending) return;
+    pendingFocus.current = null;
+    if (!shouldRestoreFocus(document.activeElement, pending.origin, document.body)) return;
+    const hasToastAction = !!document.querySelector("[data-toast-action]");
+    const target = focusAfterLog(entries.active, pending.key, hasToastAction);
+    const button = target === "toast" ? document.querySelector<HTMLElement>("[data-toast-action]")
+      : target && [...(list.current?.querySelectorAll<HTMLElement>("button[aria-label]") ?? [])].find((b) => b.getAttribute("aria-label") === target.row);
+    button?.focus();
+  });
+
   return (
     <>
       <header className="page-header"><h1>Up Next</h1><p>The next episode of everything you’re watching.</p></header>
@@ -101,13 +123,13 @@ export default function UpNextPage() {
         </div>
       ) : (
         <>
-          {entries.active.length > 0 && <ul className={styles.list} aria-label="Up Next">
+          {entries.active.length > 0 && <ul ref={list} className={styles.list} aria-label="Up Next">
             {entries.active.map((entry) => {
               const code = `S${entry.next.season}E${entry.next.number}`;
               return <ListRow key={entry.title.tmdbId} leading={<Poster src={entry.title.posterPath ? `https://image.tmdb.org/t/p/w92${entry.title.posterPath}` : null} small />}
                 title={entry.title.name}
                 subtitle={<span key={code} className={styles.episode}>{code} · {entry.next.name}<span className={styles.meta}><StatusPill status={entry.title.status} /> {entry.remaining} left{entry.rewatchNumber !== null && ` in rewatch #${entry.rewatchNumber}`}</span><WatchProviderBadges title={entry.title} /></span>}
-                trailing={<Button icon="plus" size="lg" variant="ghost" disabled={busy} aria-label={`Log ${code} of ${entry.title.name}`} onClick={() => void log(entry)} />} />;
+                trailing={<Button icon="plus" size="lg" variant="ghost" disabled={busy} aria-label={logButtonLabel(entry)} onClick={() => void log(entry)} />} />;
             })}
           </ul>}
           {entries.caughtUp.length > 0 && <section className={styles.caughtUp} aria-labelledby="caught-up"><h2 id="caught-up">Caught up</h2><ul className={styles.list}>

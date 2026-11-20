@@ -11,7 +11,7 @@ export function Toast({ message, actionLabel, onAction }: Omit<ToastOptions, "du
     <div className={styles.toast}>
       <span className={styles.toastMessage}>{message}</span>
       {actionLabel && onAction && (
-        <button type="button" className={styles.toastAction} onClick={onAction}>
+        <button type="button" className={styles.toastAction} data-toast-action onClick={onAction}>
           {actionLabel}
         </button>
       )}
