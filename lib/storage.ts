@@ -227,8 +227,14 @@ export async function requestPersistentStorage(): Promise<boolean> {
 
 let shared: Promise<LibraryRepository> | undefined;
 
-/** The app's library, opened on first use. Browser only. */
+/** The app's library, opened on first use. Browser only. A failed open is retried on the next call. */
 export function libraryRepository(): Promise<LibraryRepository> {
-  shared ??= openLibraryDB().then((db) => new LibraryRepository(db));
+  shared ??= openLibraryDB().then(
+    (db) => new LibraryRepository(db),
+    (error: unknown) => {
+      shared = undefined;
+      throw error;
+    },
+  );
   return shared;
 }

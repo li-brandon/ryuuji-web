@@ -8,10 +8,13 @@ import breakingBadSeason1 from "../test/fixtures/tmdb/tv-1396-season-1.json";
 import {
   addTitle,
   existingTitleHref,
+  isApplePlatform,
   isQuickAddShortcut,
   itemId,
+  modKeyLabel,
   moveSelection,
   refreshTitle,
+  SEASON_BATCH_SIZE,
   searchTitles,
   shortcutStatus,
   type Fetcher,
@@ -54,6 +57,39 @@ describe("searchTitles", () => {
       { tmdbId: 27205, kind: "movie", name: "Inception", year: "2010", posterPath: "/oYuLEt3zVCKq57qu2F8dT7NIa6f.jpg", isAnime: false },
     ]);
   });
+
+  it("tags Japanese animation as anime", async () => {
+    const fetcher = fakeFetcher({
+      "search/movie?query=x&include_adult=false&page=1": {
+        results: [
+          { id: 129, title: "Spirited Away", genre_ids: [16, 10751], original_language: "ja", popularity: 9 },
+          { id: 862, title: "Toy Story", genre_ids: [16, 35], original_language: "en", popularity: 8 },
+        ],
+      },
+      "search/tv?query=x&include_adult=false&page=1": {
+        results: [
+          { id: 209867, name: "Frieren", genre_ids: [16, 10765], origin_country: ["JP"], original_language: "ja", popularity: 7 },
+          { id: 1396, name: "Breaking Bad", genre_ids: [18], origin_country: ["JP"], original_language: "ja", popularity: 6 },
+        ],
+      },
+    });
+    expect((await searchTitles("x", fetcher)).map((r) => [r.name, r.isAnime])).toEqual([
+      ["Spirited Away", true],
+      ["Toy Story", false],
+      ["Frieren", true],
+      ["Breaking Bad", false],
+    ]);
+  });
+
+  it("forwards an abort signal to both requests", async () => {
+    const fetcher = fakeFetcher({
+      "search/movie?query=x&include_adult=false&page=1": { results: [] },
+      "search/tv?query=x&include_adult=false&page=1": { results: [] },
+    });
+    const { signal } = new AbortController();
+    await searchTitles("x", fetcher, signal);
+    expect(fetcher.mock.calls.map((call) => call[2])).toEqual([signal, signal]);
+  });
 });
 
 describe("addTitle", () => {
@@ -79,6 +115,31 @@ describe("addTitle", () => {
       [1, breakingBadSeason1.episodes.length],
     ]);
     expect(title.showStatus).toBe("Ended");
+  });
+
+  it("batches more than SEASON_BATCH_SIZE seasons across append_to_response requests", async () => {
+    const library = await repo();
+    const numbers = Array.from({ length: SEASON_BATCH_SIZE + 1 }, (_, i) => i + 1);
+    const season = (n: number) => ({
+      ...breakingBadSeason1,
+      season_number: n,
+      episodes: breakingBadSeason1.episodes.map((e) => ({ ...e, id: e.id + n * 1000, season_number: n })),
+    });
+    const append = (batch: number[]) => `tv/1396?${new URLSearchParams({ append_to_response: batch.map((n) => `season/${n}`).join(",") })}`;
+    const first = numbers.slice(0, SEASON_BATCH_SIZE);
+    const second = numbers.slice(SEASON_BATCH_SIZE);
+    const fetcher = fakeFetcher({
+      "tv/1396": { ...breakingBad, seasons: numbers.map((n) => ({ season_number: n })) },
+      [append(first)]: { ...breakingBad, ...Object.fromEntries(first.map((n) => [`season/${n}`, season(n)])) },
+      [append(second)]: { ...breakingBad, ...Object.fromEntries(second.map((n) => [`season/${n}`, season(n)])) },
+    });
+    const { title } = await addTitle(library, bb, "planToWatch", { fetcher, now });
+    expect(fetcher.mock.calls.flatMap((call) => call[1]?.append_to_response ?? [])).toEqual([
+      first.map((n) => `season/${n}`).join(","),
+      `season/${SEASON_BATCH_SIZE + 1}`,
+    ]);
+    expect(title.episodes?.seasons.map((s) => s.number)).toEqual(numbers);
+    expect(title.episodes?.seasons.every((s) => s.episodes.length === breakingBadSeason1.episodes.length)).toBe(true);
   });
 
   it("returns the existing title without fetching or duplicating", async () => {
@@ -123,6 +184,17 @@ describe("keyboard", () => {
     expect(isQuickAddShortcut({ ...key, ctrlKey: true, key: "K" })).toBe(true);
     expect(isQuickAddShortcut(key)).toBe(false);
     expect(isQuickAddShortcut({ ...key, ctrlKey: true, shiftKey: true })).toBe(false);
+  });
+
+  it("labels the shortcut modifier for the platform", () => {
+    expect(isApplePlatform({ platform: "MacIntel" })).toBe(true);
+    expect(isApplePlatform({ platform: "", userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)" })).toBe(true);
+    expect(isApplePlatform({ userAgentData: { platform: "macOS" }, platform: "MacIntel" })).toBe(true);
+    expect(isApplePlatform({ userAgentData: { platform: "Windows" }, platform: "Win32" })).toBe(false);
+    expect(isApplePlatform({ platform: "Linux x86_64" })).toBe(false);
+    expect(isApplePlatform(undefined)).toBe(false);
+    expect(modKeyLabel(true)).toBe("⌘");
+    expect(modKeyLabel(false)).toBe("Ctrl-");
   });
 });
 
