@@ -68,9 +68,11 @@ describe("Library selection", () => {
       await repo.createTitle(other);
       await repo.addWatchEvent(entries[1].events[0]);
       await repo.addWatchEvent({ ...entries[1].events[0], uid: "00000000-0000-4000-8000-000000000002", kind: "movie" });
+      const { uid } = entries[1].events[0];
+      expect(await repo.getWatchEvent(uid)).toEqual(entries[1].events[0]);
       await repo.deleteTitle(a);
       expect(await repo.getTitle(a)).toBeUndefined();
-      expect(await repo.getWatchEvent("watch")).toBeUndefined();
+      expect(await repo.getWatchEvent(uid)).toBeUndefined();
       expect(await repo.getTitle(other)).toEqual(other);
       expect(await repo.listWatchEvents(other)).toHaveLength(1);
     } finally { db.close(); }
