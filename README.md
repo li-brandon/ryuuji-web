@@ -42,9 +42,9 @@ Tokens (spacing, radius, type, color, shadows, motion) live in `app/tokens.css`;
 | `TMDB_TOKEN` | TMDB API read access token. **Server-side only.** |
 | `RYUUJI_PASSCODE` | Passcode that unlocks the TMDB proxy; at least 16 characters. **Server-side only.** |
 | `RYUUJI_SESSION_SECRET` | Key that signs session cookies; at least 32 random characters (e.g. `openssl rand -base64 48`). Required when `RYUUJI_PASSCODE` is set. **Server-side only.** |
-| `RYUUJI_SESSION_NOT_BEFORE` | Optional. Rejects sessions issued before this time: an ISO 8601 date-time (`2026-10-29T12:00:00Z`) or epoch seconds. |
+| `RYUUJI_SESSION_NOT_BEFORE` | Optional. Rejects sessions issued before this time: an ISO 8601 date-time with a timezone (`Z` or `±HH:MM`, e.g. `2026-10-29T12:00:00Z`) or epoch seconds. Date-only values and date-times without a timezone are rejected. |
 
-- The server refuses to start (`register()` in `instrumentation.ts` calls `readAccessConfig` from `lib/server/config.ts`) if `RYUUJI_PASSCODE` is set but shorter than 16 characters, `RYUUJI_SESSION_SECRET` is missing or shorter than 32, or `RYUUJI_SESSION_NOT_BEFORE` does not parse. The error names the variable, never its value. With `RYUUJI_PASSCODE` unset it starts with access disabled. Routes re-check per request and fail closed with `503`.
+- The server exits at startup (`register()` in `instrumentation.ts` calls `exitOnInvalidAccessConfig` from `lib/server/config.ts`, which logs one line to stderr and calls `process.exit(1)` in the Node.js runtime) if `RYUUJI_PASSCODE` is set but shorter than 16 characters, `RYUUJI_SESSION_SECRET` is missing or shorter than 32, or `RYUUJI_SESSION_NOT_BEFORE` does not parse or has no timezone. The log line names the variable, never its value. With `RYUUJI_PASSCODE` unset it starts with access disabled. Routes still re-check per request and fail closed with `503`.
 - For local development, put them in `.env.local` (git-ignored). `.env.example` lists the required variables.
 - Never prefix them with `NEXT_PUBLIC_` — that would inline it into the client bundle.
 - Only read them from server code (modules under `lib/server/` import `server-only`) (Server Components, Route Handlers, Server Actions); never pass them to the browser or log them.

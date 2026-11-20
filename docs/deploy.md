@@ -29,13 +29,13 @@ Add these in **Settings → Environment Variables** for both **Production** and 
 | `TMDB_TOKEN` | TMDB API read access token (v4 "API Read Access Token"). |
 | `RYUUJI_PASSCODE` | The passcode you type to unlock search; **at least 16 characters**. Use a passphrase you can type on a phone. |
 | `RYUUJI_SESSION_SECRET` | Signs session cookies; **at least 32 characters**. Generate locally with `openssl rand -base64 48` and paste the output; do not reuse it anywhere else. |
-| `RYUUJI_SESSION_NOT_BEFORE` | Optional. Sessions issued before this time are rejected: an ISO 8601 date-time such as `2026-10-29T12:00:00Z`, or epoch seconds. Set it to now (`date -u +%Y-%m-%dT%H:%M:%SZ`) and redeploy to sign every device out. |
+| `RYUUJI_SESSION_NOT_BEFORE` | Optional. Sessions issued before this time are rejected: an ISO 8601 date-time with a timezone (`Z` or `±HH:MM`) such as `2026-10-29T12:00:00Z`, or epoch seconds. Values without a timezone (`2026-10-29T12:00:00`, `2026-10-29`) are rejected. Set it to now (`date -u +%Y-%m-%dT%H:%M:%SZ`) and redeploy to sign every device out. |
 
 Use different `RYUUJI_PASSCODE` / `RYUUJI_SESSION_SECRET` values for Preview and Production if previews are shared with anyone.
 
 Notes:
 
-- **The server refuses to start if these are invalid.** `instrumentation.ts` validates them at startup: a passcode under 16 characters, a missing or short session secret, or an unparseable not-before time throws, naming the variable but never its value. The deployment's functions then fail; fix the variable and redeploy. With `RYUUJI_PASSCODE` unset the app starts but search and login return `503`.
+- **The server exits at startup if these are invalid.** `instrumentation.ts` validates them at startup: on a passcode under 16 characters, a missing or short session secret, or a not-before time that does not parse or has no timezone, the Node.js server logs one line to stderr naming the variable (never its value) and exits with code 1 instead of staying up. The deployment's functions then fail to start; fix the variable and redeploy. Routes also re-check per request and return `503` on an invalid config. With `RYUUJI_PASSCODE` unset the app starts but search and login return `503`.
 - **The first deploy of signed sessions logs everyone out once.** Cookies issued before signed sessions (LIB-425) do not verify; each device re-enters the passcode once in Search.
 - Changing a variable only takes effect on the next deployment (**Deployments → ⋯ → Redeploy**).
 - **The token never reaches the browser.** CI builds with sentinel secret values and `npm run check:bundle` fails if any of them, or the variable names, appear in `.next/static`. To check by hand: `npm run build && npm run check:bundle`.
