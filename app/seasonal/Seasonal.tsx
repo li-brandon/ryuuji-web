@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, buttonClass } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -11,8 +11,10 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { useToast } from "@/components/ui/Toast";
 import { AnimeSeason } from "@/lib/anime-season";
+import { useLibraryChanges } from "@/lib/library-changes";
 import { addTitle, itemId, posterUrl, titleHref } from "@/lib/quick-add";
 import { loadSeasonal, type SeasonalItem } from "@/lib/seasonal";
+import { readOrder } from "@/lib/read-order";
 import { libraryRepository } from "@/lib/storage";
 import type { Title } from "@/lib/types";
 import styles from "./seasonal.module.css";
@@ -51,13 +53,37 @@ function SeasonalResults({ season }: { season: AnimeSeason }) {
   const [addError, setAddError] = useState<string | null>(null);
   const toast = useToast();
   const { year, quarter } = season;
+  // Library reads and local adds apply in start order, so an older snapshot can't overwrite a newer one.
+  const [order] = useState(readOrder);
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
   useEffect(() => {
     let stale = false;
-    Promise.all([loadSeasonal(new AnimeSeason(year, quarter)), libraryRepository().then((repo) => repo.listTitles())])
-      .then(([items, library]) => { if (!stale) { setTitles(library); setPhase({ kind: "loaded", items }); } })
+    const library = libraryRepository().then((repo) => {
+      const seq = order.start();
+      return repo.listTitles().then((titles) => ({ seq, titles }));
+    });
+    Promise.all([loadSeasonal(new AnimeSeason(year, quarter)), library])
+      .then(([items, { seq, titles }]) => {
+        if (stale) return;
+        order.apply(seq, () => setTitles(titles));
+        setPhase({ kind: "loaded", items });
+      })
       .catch((error: unknown) => { if (!stale) setPhase({ kind: "failed", message: errorText(error) }); });
     return () => { stale = true; };
-  }, [year, quarter, retry]);
+  }, [year, quarter, retry, order]);
+
+  // Another tab (or another part of this one) changed the library: re-read titles only, not TMDB.
+  const reloadTitles = useCallback(async () => {
+    const repo = await libraryRepository();
+    const seq = order.start();
+    const library = await repo.listTitles();
+    if (mounted.current) order.apply(seq, () => setTitles(library));
+  }, [order]);
+  useLibraryChanges(reloadTitles);
 
   async function add(item: SeasonalItem) {
     const id = itemId(item);
@@ -68,7 +94,8 @@ function SeasonalResults({ season }: { season: AnimeSeason }) {
     try {
       // Default adds are not logging/status actions; addTitle owns status validation and undo rules.
       const { title, outcome } = await addTitle(await libraryRepository(), item);
-      setTitles((previous) => [...previous.filter((existing) => itemId(existing) !== id), title]);
+      // Sequenced after the write commits: reads already in flight may predate it, later ones won't.
+      order.apply(order.start(), () => setTitles((previous) => [...previous.filter((existing) => itemId(existing) !== id), title]));
       if (outcome === "added") toast({ message: `Added “${item.name}” to Plan to Watch` });
     } catch (error) {
       setAddError(`Couldn't add “${item.name}”: ${errorText(error)}`);

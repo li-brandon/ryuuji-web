@@ -2,6 +2,7 @@ import { setTheme } from "./theme";
 import { saveWatchPreferences } from "./watch-preferences";
 import { planLibraryImport, readLibraryFile, type ImportPlan } from "./library-import";
 import { withWatchLogLock } from "./watch-log-lock";
+import { deepEqual } from "./deep-equal";
 import { notifyLibraryChanged } from "./library-changes";
 import { remapEvents, titleEpisodes } from "./progress";
 import { statusAfterRefresh } from "./status-engine";
@@ -75,6 +76,17 @@ export class LibraryRepository {
     return value;
   }
 
+  /**
+   * A `write` that tells other tabs (and this one) once the transaction has committed. The
+   * operation calls `unchanged()` for a no-op; a failed write throws before notifying.
+   */
+  private async change<T>(operation: (tx: IDBPTransaction<RyuujiDB, ["titles", "watchEvents"], "readwrite">, unchanged: () => void) => Promise<T>): Promise<T> {
+    let changed = true;
+    const value = await this.write((tx) => operation(tx, () => { changed = false; }));
+    if (changed) notifyLibraryChanged();
+    return value;
+  }
+
   async librarySnapshot(): Promise<{ titles: Title[]; events: WatchEvent[] }> {
     const tx = this.db.transaction(["titles", "watchEvents"], "readonly");
     const [titles, events] = await Promise.all([tx.objectStore("titles").getAll(), tx.objectStore("watchEvents").getAll()]);
@@ -102,7 +114,7 @@ export class LibraryRepository {
 
   async createTitle(title: Title): Promise<Title> {
     const validated = titleSchema.parse(title);
-    return this.write(async (tx) => {
+    return this.change(async (tx) => {
       const store = tx.objectStore("titles");
       if (await store.getKey(keyOf(validated))) throw new DuplicateTitleError(validated);
       await store.add(validated);
@@ -120,19 +132,24 @@ export class LibraryRepository {
 
   /** Applies `changes` to an existing title. The key fields can't change. */
   async updateTitle(key: TitleKey, changes: Partial<Omit<Title, "tmdbId" | "kind">>): Promise<Title> {
-    return this.write(async (tx) => {
+    return this.change(async (tx, unchanged) => {
       const existing = await tx.objectStore("titles").get(keyOf(key));
       if (!existing) {
         throw new TitleNotFoundError(key);
       }
       const defined = Object.fromEntries(Object.entries(changes).filter(([, value]) => value !== undefined));
       const updated = titleSchema.parse({ ...existing, ...defined, tmdbId: existing.tmdbId, kind: existing.kind });
+      if (deepEqual(updated, existing)) unchanged();
       await tx.objectStore("titles").put(updated);
       return updated;
     });
   }
 
-  /** Saves metadata, remaps history, and derives status from the latest state in one transaction. */
+  /**
+   * Saves metadata, remaps history, and derives status from the latest state in one transaction.
+   * Doesn't notify per title: the refresh scheduler announces a whole cycle once, and a manual
+   * refresh announces itself, so a bulk refresh doesn't reload every tab once per title.
+   */
   async applyMetadata(
     key: TitleKey,
     metadata: Partial<Pick<Title,
@@ -167,18 +184,21 @@ export class LibraryRepository {
 
   /** Deletes the title and all its watch events in one transaction. */
   async deleteTitle(key: TitleKey): Promise<void> {
-    return this.write(async (tx) => {
+    return this.change(async (tx, unchanged) => {
       const events = tx.objectStore("watchEvents");
-      for (const uid of await events.index("byTitle").getAllKeys(keyOf(key))) {
+      const titles = tx.objectStore("titles");
+      const uids = await events.index("byTitle").getAllKeys(keyOf(key));
+      if (!uids.length && !(await titles.getKey(keyOf(key)))) unchanged();
+      for (const uid of uids) {
         await events.delete(uid);
       }
-      await tx.objectStore("titles").delete(keyOf(key));
+      await titles.delete(keyOf(key));
     });
   }
 
   async addWatchEvent(event: WatchEvent): Promise<void> {
     event = watchEventSchema.parse(event);
-    return this.write(async (tx) => {
+    return this.change(async (tx) => {
       if (!(await tx.objectStore("titles").getKey(keyOf(event)))) {
         throw new TitleNotFoundError(event);
       }
@@ -202,12 +222,13 @@ export class LibraryRepository {
     key: TitleKey,
     change: { add: WatchEvent[]; remove: string[]; status: ListStatus },
   ): Promise<Title> {
-    return this.write(async (tx) => {
+    return this.change(async (tx, unchanged) => {
       const titles = tx.objectStore("titles");
       const existing = await titles.get(keyOf(key));
       if (!existing) {
         throw new TitleNotFoundError(key);
       }
+      if (!change.add.length && !change.remove.length && change.status === existing.status) unchanged();
       const events = tx.objectStore("watchEvents");
       const validated = change.add.map((event) => watchEventSchema.parse(event));
       const updated = titleSchema.parse({ ...existing, status: change.status });

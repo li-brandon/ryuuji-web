@@ -204,3 +204,54 @@ it("handles a failed IndexedDB request and its transaction rejection together", 
   await repo.addWatchEvent(event("b"));
   expect(await repo.listWatchEvents(title())).toHaveLength(2);
 });
+
+describe("library change notices", () => {
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+  it("broadcast after each committed title or watch-event write", async () => {
+    const { repo } = await setup();
+    const posted = vi.spyOn(BroadcastChannel.prototype, "postMessage");
+    const writes: (() => Promise<unknown>)[] = [
+      () => repo.createTitle(title()),
+      () => repo.updateTitle(title(), { status: "watching" }),
+      () => repo.addWatchEvent(event("a")),
+      () => repo.commitWatchLog(title(), { add: [event("b")], remove: [event("a").uid], status: "completed" }),
+      () => repo.deleteTitle(title()),
+    ];
+    for (const write of writes) {
+      posted.mockClear();
+      await write();
+      expect(posted).toHaveBeenCalledExactlyOnceWith({ tab: expect.any(String) });
+    }
+    expect(await repo.listTitles()).toEqual([]);
+    expect(await repo.listWatchEvents(title())).toEqual([]);
+  });
+
+  it("stay silent when a write throws or changes nothing", async () => {
+    const { repo } = await setup();
+    await repo.createTitle(title({ notes: "Keep me" }));
+    await repo.addWatchEvent(event("a"));
+    const posted = vi.spyOn(BroadcastChannel.prototype, "postMessage");
+    const missing = { tmdbId: 1, kind: "movie" } as const;
+    await expect(repo.createTitle(title())).rejects.toBeInstanceOf(DuplicateTitleError);
+    await expect(repo.updateTitle(missing, { score: 1 })).rejects.toBeInstanceOf(TitleNotFoundError);
+    await expect(repo.updateTitle(title(), { score: 1.5 })).rejects.toThrow();
+    await expect(repo.addWatchEvent(event("b", { tmdbId: 2 }))).rejects.toBeInstanceOf(TitleNotFoundError);
+    await expect(repo.addWatchEvent(event("a"))).rejects.toMatchObject({ name: "ConstraintError" });
+    await expect(repo.commitWatchLog(missing, { add: [], remove: [], status: "completed" })).rejects.toBeInstanceOf(TitleNotFoundError);
+    await expect(repo.commitWatchLog(title(), { add: [event("b", { batchId: "bad" })], remove: [], status: "completed" })).rejects.toThrow();
+    await repo.updateTitle(title(), { notes: "Keep me" });
+    await repo.commitWatchLog(title(), { add: [], remove: [], status: "planToWatch" });
+    await repo.deleteTitle(missing);
+    await repo.applyMetadata(title(), { overview: "Refreshed" }, "2026-10-29");
+    expect(posted).not.toHaveBeenCalled();
+  });
+
+  it("don't fail a committed write when notifying fails", async () => {
+    const { repo } = await setup();
+    vi.spyOn(BroadcastChannel.prototype, "postMessage").mockImplementation(() => { throw new Error("closed"); });
+    vi.stubGlobal("window", { dispatchEvent: () => { throw new Error("gone"); } });
+    await expect(repo.createTitle(title())).resolves.toEqual(title());
+    expect(await repo.getTitle(title())).toEqual(title());
+  });
+});

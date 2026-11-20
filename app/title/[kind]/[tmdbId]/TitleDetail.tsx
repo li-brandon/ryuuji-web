@@ -2,7 +2,7 @@
 
 import { WhereToWatch } from "@/components/WatchProviders";
 import Link from "next/link";
-import { useLibraryChanges } from "@/lib/library-changes";
+import { notifyLibraryChanged, useLibraryChanges } from "@/lib/library-changes";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
@@ -120,6 +120,7 @@ export function TitleDetail({ titleKey }: { titleKey: TitleKey }) {
     setBusy(true);
     try {
       await refreshTitle(await libraryRepository(), titleKey);
+      notifyLibraryChanged();
       await reload();
       toast({ message: "Refreshed from TMDB" });
     } catch (error) {

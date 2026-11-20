@@ -7,6 +7,31 @@ describe("AnimeSeason (macOS port)", () => {
       expect(AnimeSeason.current(new Date(2026, month - 1, day, 12))).toEqual(new AnimeSeason(2026, quarter));
     }
   });
+  it("current season turns over at local midnight on New Year's, not UTC midnight", () => {
+    const zone = process.env.TZ;
+    try {
+      // Chicago is behind UTC, so late Dec 31 is already Jan 1 in UTC; Kiritimati (UTC+14) is ahead,
+      // so early Jan 1 is still Dec 31 in UTC. UTC getters would pick the wrong season in both.
+      for (const tz of ["America/Chicago", "Asia/Tokyo", "Pacific/Kiritimati"]) {
+        process.env.TZ = tz;
+        const evening = new Date(2025, 11, 31, 23, 59, 59, 999);
+        const morning = new Date(2026, 0, 1, 0, 0);
+        expect(evening.getTimezoneOffset(), tz).not.toBe(0);
+        expect(AnimeSeason.current(evening), tz).toEqual(new AnimeSeason(2025, "fall"));
+        expect(AnimeSeason.current(morning), tz).toEqual(new AnimeSeason(2026, "winter"));
+        expect(morning.getTime() - evening.getTime(), tz).toBe(1);
+        // At least one side of midnight sits on a different UTC date than its local date.
+        expect([evening.getUTCDate() !== evening.getDate(), morning.getUTCDate() !== morning.getDate()], tz).toContain(true);
+      }
+      process.env.TZ = "America/Chicago";
+      expect(new Date(2025, 11, 31, 23, 0).getUTCFullYear()).toBe(2026);
+      process.env.TZ = "Pacific/Kiritimati";
+      expect(new Date(2026, 0, 1, 0, 0).getUTCFullYear()).toBe(2025);
+    } finally {
+      if (zone === undefined) delete process.env.TZ;
+      else process.env.TZ = zone;
+    }
+  });
   it("next and previous cross years", () => {
     const fall = new AnimeSeason(2025, "fall");
     expect(fall.next).toEqual(new AnimeSeason(2026, "winter"));
