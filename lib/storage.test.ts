@@ -9,7 +9,7 @@ import {
   requestPersistentStorage,
   TitleNotFoundError,
 } from "./storage";
-import type { Title, WatchEvent } from "./types";
+import type { ListStatus, Title, WatchEvent } from "./types";
 
 let dbCount = 0;
 
@@ -203,4 +203,68 @@ it("handles a failed IndexedDB request and its transaction rejection together", 
   expect(await repo.listWatchEvents(title())).toEqual([event("a")]);
   await repo.addWatchEvent(event("b"));
   expect(await repo.listWatchEvents(title())).toHaveLength(2);
+});
+
+it("rolls back an earlier event write when a later remapped event is invalid", async () => {
+  const { db, repo } = await setup();
+  await repo.createTitle(title());
+  const episode = (number: number) => ({ tmdbId: 10 + number, season: 1, number, name: `Episode ${number}`, airDate: null, runtime: null });
+  // A corrupt stored event bypasses repository validation and is only caught when remapping rewrites it.
+  const corrupt = event("b", { episode: 2, watchedAt: "bad" });
+  await repo.addWatchEvent(event("a"));
+  await db.put("watchEvents", corrupt);
+  const put = vi.spyOn(IDBObjectStore.prototype, "put");
+  try {
+    await expect(repo.applyMetadata(title(), {
+      episodes: { schemaVersion: 1, seasons: [{ number: 1, name: "Season 1", episodes: [episode(1), episode(2)] }] },
+    }, "2026-10-29")).rejects.toThrow();
+    // The valid event was written before validation failed, so only the abort keeps it out.
+    expect(put).toHaveBeenCalledWith({ ...event("a"), tmdbEpisodeId: 11 });
+  } finally {
+    put.mockRestore();
+  }
+  expect(await repo.getTitle(title())).toEqual(title());
+  expect(await repo.listWatchEvents(title())).toEqual([event("a"), corrupt]);
+});
+
+it("rejects an invalid watch-log status without touching events or the title", async () => {
+  const { repo } = await setup();
+  await repo.createTitle(title());
+  await repo.addWatchEvent(event("a"));
+  const change = { add: [event("b")], remove: [event("a").uid], status: "bogus" as ListStatus };
+  await expect(repo.commitWatchLog(title(), change)).rejects.toThrow();
+  expect(await repo.getTitle(title())).toEqual(title());
+  expect(await repo.listWatchEvents(title())).toEqual([event("a")]);
+});
+
+/** Aborts the transaction once a request on `store` succeeds, like a commit that fails after the last request. */
+function abortAfterSuccess(method: "add" | "getAll", store: string) {
+  const original = IDBObjectStore.prototype[method] as (this: IDBObjectStore, ...args: unknown[]) => IDBRequest;
+  return vi.spyOn(IDBObjectStore.prototype, method).mockImplementation(function (this: IDBObjectStore, ...args: unknown[]) {
+    const request = original.apply(this, args);
+    if (this.name === store) request.addEventListener("success", () => this.transaction.abort());
+    return request;
+  } as never);
+}
+
+it("rejects a write whose transaction aborts after the operation resolves", async () => {
+  const { repo } = await setup();
+  const add = abortAfterSuccess("add", "titles");
+  try {
+    await expect(repo.createTitle(title())).rejects.toMatchObject({ name: "AbortError" });
+  } finally {
+    add.mockRestore();
+  }
+  expect(await repo.listTitles()).toEqual([]);
+});
+
+it("rejects a snapshot whose transaction aborts after both reads succeed", async () => {
+  const { repo } = await setup();
+  await repo.createTitle(title());
+  const getAll = abortAfterSuccess("getAll", "watchEvents");
+  try {
+    await expect(repo.librarySnapshot()).rejects.toMatchObject({ name: "AbortError" });
+  } finally {
+    getAll.mockRestore();
+  }
 });
