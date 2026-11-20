@@ -52,6 +52,14 @@ describe("history", () => {
     expect([...numbers]).toEqual([[again.uid, 1]]);
   });
 
+  it("numbers rewatches by stored episode id over season and episode", () => {
+    const first = event(1, "2026-06-01T00:00:00Z", { season: 1, episode: 5, tmdbEpisodeId: 77_001 });
+    const renumbered = event(1, "2026-06-02T00:00:00Z", { season: 2, episode: 1, tmdbEpisodeId: 77_001 });
+    const sameNumbers = event(1, "2026-06-03T00:00:00Z", { season: 1, episode: 5, tmdbEpisodeId: 77_002 });
+    const numbers = rewatchNumbers([sameNumbers, renumbered, first]);
+    expect([...numbers]).toEqual([[renumbered.uid, 1]]);
+  });
+
   it("numbers rewatches per episode and title", () => {
     const first = event(1, "2026-06-01T00:00:00Z");
     const second = event(1, "2026-06-02T00:00:00Z", { season: null, episode: null });

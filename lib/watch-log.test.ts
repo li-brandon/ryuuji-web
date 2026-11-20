@@ -551,6 +551,72 @@ describe("deleting from History (LIB-416)", () => {
   });
 });
 
+describe("deleting a batch from History (LIB-444)", () => {
+  const sortByUid = <T extends { uid: string }>(list: T[]) => [...list].sort((a, b) => a.uid.localeCompare(b.uid));
+
+  /** A Completed show: S1E1 logged alone, the rest of season 1 and season 2 each bulk marked. */
+  async function batchedShow() {
+    const episodes = [...F.season(1, 3), ...F.season(2, 2)];
+    const show = await makeShow(episodes, "watching", "Ended");
+    await service.log(show, episodes[0]);
+    await service.bulkMark(show, { season: 1 });
+    await service.bulkMark(show, { season: 2 });
+    const all = await events(show);
+    const batchId = all.find((e) => e.season === 1 && e.batchId)!.batchId!;
+    return { show, episodes, batchId, all };
+  }
+
+  it("removes every event of the batch, updates progress and recomputes status", async () => {
+    const { show, episodes, batchId, all } = await batchedShow();
+    const movie = await makeMovie();
+    await service.log(movie, null);
+    const movieEvents = await events(movie);
+    expect(await status(show)).toBe("completed");
+
+    await service.deleteBatch(show, batchId);
+
+    const kept = all.filter((e) => e.batchId !== batchId);
+    expect(kept.map((e) => [e.season, e.episode])).toEqual(expect.arrayContaining([[1, 1], [2, 1], [2, 2]]));
+    expect(sortByUid(await events(show))).toEqual(sortByUid(kept));
+    expect(await events(movie)).toEqual(movieEvents);
+    expect(isWatched(await progress(show), episodes[0])).toBe(true);
+    expect(isWatched(await progress(show), episodes[1])).toBe(false);
+    expect(isWatched(await progress(show), episodes[2])).toBe(false);
+    expect((await progress(show)).remaining).toBe(2);
+    expect(await status(show)).toBe("watching");
+  });
+
+  it("registers exactly one undo step that restores every event and the status", async () => {
+    const undo = new UndoStack();
+    const episodes = F.season(1, 3);
+    const show = await makeShow(episodes, "watching", "Returning Series");
+    await service.bulkMark(show, "all");
+    expect(await status(show)).toBe("caughtUp");
+    const before = await events(show);
+
+    await service.deleteBatch(show, before[0].batchId!, undo);
+    expect(await events(show)).toHaveLength(0);
+    expect(await status(show)).toBe("watching");
+    expect(undo.size).toBe(1);
+    expect(undo.undoActionName).toBe("Delete Batch");
+
+    await undo.undo();
+
+    expect(undo.canUndo).toBe(false);
+    expect(sortByUid(await events(show))).toEqual(sortByUid(before));
+    expect(await status(show)).toBe("caughtUp");
+  });
+
+  it("does nothing and registers no undo for an unknown batch", async () => {
+    const undo = new UndoStack();
+    const { show, all } = await batchedShow();
+    await service.deleteBatch(show, crypto.randomUUID(), undo);
+    expect(sortByUid(await events(show))).toEqual(sortByUid(all));
+    expect(await status(show)).toBe("completed");
+    expect(undo.canUndo).toBe(false);
+  });
+});
+
 describe("title detail (LIB-415)", () => {
   it("marks up to an episode across seasons, skipping specials, as one undo step with a shared batch id", async () => {
     const episodes = [...F.season(0, 2), ...F.season(1, 3), ...F.season(2, 3)];

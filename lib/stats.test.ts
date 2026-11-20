@@ -11,6 +11,7 @@ import {
   byStatus,
   filterEvents,
   hours,
+  isScore,
   rangeStart,
   scoreHistogram,
   statsTitle,
@@ -236,6 +237,13 @@ describe("scores", () => {
     expect(bins.reduce((sum, b) => sum + b.count, 0)).toBe(3);
     expect(bins.filter((b) => b.count > 0).map((b) => b.score)).toEqual([1, 7, 10]);
   });
+
+  it("counts only whole scores from one to ten", () => {
+    expect([1, 2, 7, 10].every(isScore)).toBe(true);
+    for (const score of [0, -1, 11, 0.5, 7.5, 10.5, Number.NaN, Number.POSITIVE_INFINITY, null]) {
+      expect(isScore(score), String(score)).toBe(false);
+    }
+  });
 });
 
 describe("range boundaries", () => {
@@ -261,6 +269,21 @@ describe("rewatches without episode ids", () => {
       [4, true],
       [5, false],
     ]);
+  });
+});
+
+describe("rewatches of uncached episodes", () => {
+  const ref = (tmdbEpisodeId: number, season: number, episode: number, day: number) => ({ season, episode, tmdbEpisodeId, watchedAt: date(2026, 3, day) });
+  const rewatches = (title: StatsTitle) => titleEvents(title).map((e) => [e.watchedAt.getUTCDate(), e.isRewatch]);
+
+  it("matches events by stored episode id when the episode is no longer cached, even if renumbered", () => {
+    const title = show(F.season(1, 2), [ref(77_001, 1, 5, 1), ref(77_001, 2, 1, 2)]);
+    expect(rewatches(title)).toEqual([[1, false], [2, true]]);
+  });
+
+  it("keeps different uncached episode ids apart even with the same season and episode", () => {
+    const title = show(F.season(1, 2), [ref(77_001, 1, 5, 1), ref(77_002, 1, 5, 2)]);
+    expect(rewatches(title)).toEqual([[1, false], [2, false]]);
   });
 });
 
