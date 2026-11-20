@@ -1,10 +1,11 @@
 // Use an already-running server: BASE_URL=http://localhost:3000 node scripts/screenshots-421.mjs
 import assert from "node:assert/strict";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { chromium } from "playwright";
 
 const base = process.env.BASE_URL ?? "http://localhost:3000";
 const out = "/workspace/ryuuji-shots/421";
+const { version } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const NOTICE = "This product uses the TMDB API but is not endorsed or certified by TMDB.";
 
 async function assertTapTargets(page) {
@@ -25,9 +26,21 @@ async function assertTapTargets(page) {
   }
   assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "no phone horizontal overflow");
 }
+// Waits for web fonts and running animations/transitions so captures and measurements are stable.
+// Infinite animations (spinners) never finish, so only finite ones are awaited, capped at 5s.
+async function settle(page) {
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    const finite = document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().endTime !== Infinity);
+    const finished = Promise.all(finite.map((animation) => animation.finished.catch(() => {})));
+    await Promise.race([finished, new Promise((resolve) => setTimeout(resolve, 5000))]);
+  });
+}
 async function shot(page, name, phone) {
+  await settle(page);
   if (phone) await assertTapTargets(page);
   await page.evaluate(() => scrollTo(0, 0));
+  await settle(page);
   await page.screenshot({ path: `${out}/${name}.png`, fullPage: true });
 }
 
@@ -48,6 +61,7 @@ try {
     await page.waitForURL(`${base}/about`);
     await page.getByRole("heading", { level: 1, name: "Ryuuji" }).waitFor();
     await page.getByText(NOTICE, { exact: true }).waitFor();
+    await page.getByText(`Version ${version}`, { exact: true }).waitFor();
     await page.getByRole("link", { name: "Streaming data by JustWatch" }).waitFor();
     assert.equal(await page.getByRole("link", { name: "Visit themoviedb.org" }).getAttribute("href"), "https://www.themoviedb.org");
 

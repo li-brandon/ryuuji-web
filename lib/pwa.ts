@@ -12,3 +12,15 @@ export const ICONS = {
   large: { src: "/icon/512", size: 512 },
   maskable: { src: "/maskable-icon", size: 512 },
 } as const;
+
+/**
+ * Registers public/sw.js, in production builds only so dev servers never serve stale cached pages.
+ * Returns whether it tried; a failed registration only logs.
+ */
+export function registerServiceWorker(nodeEnv: string | undefined, nav: Partial<Pick<Navigator, "serviceWorker">>): boolean {
+  if (nodeEnv !== "production" || !nav.serviceWorker) return false;
+  nav.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" }).catch((error: unknown) => {
+    console.warn("Service worker registration failed", error);
+  });
+  return true;
+}

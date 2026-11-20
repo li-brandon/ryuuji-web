@@ -3,6 +3,9 @@
 //
 // - Navigations: network first; offline, the cached copy of that page, else the cached "/" shell.
 // - /_next/static/*: cache first (file names are content-hashed, so entries never go stale).
+//   The static cache is trimmed to MAX_STATIC_ENTRIES (oldest first) whenever entries are added
+//   (precache and cache misses) and on activate. Trims run one at a time, so they never overlap.
+// - Only complete same-origin 200s are cached: never redirected, opaque or error responses.
 // - /api/* and everything else: not intercepted and never cached. /api/session sets the session
 //   cookie and /api/tmdb is gated by it, so their responses must not outlive the request.
 //
@@ -50,13 +53,28 @@ async function precacheShell() {
     }),
   );
   await (await caches.open(STATIC_CACHE)).addAll([...assets]);
+  await trimStaticCache();
 }
 
-async function trimStaticCache() {
-  const cache = await caches.open(STATIC_CACHE);
-  const keys = await cache.keys();
-  // Keys come back in insertion order, so the oldest go first.
-  await Promise.all(keys.slice(0, Math.max(0, keys.length - MAX_STATIC_ENTRIES)).map((key) => cache.delete(key)));
+let trimQueue = Promise.resolve();
+let queuedTrim = null;
+
+/**
+ * Trims the static cache once any running trim finishes. Calls made while a trim is waiting to
+ * start share it: it reads the keys when it starts, so it still sees their entries.
+ */
+function trimStaticCache() {
+  if (!queuedTrim) {
+    queuedTrim = trimQueue.then(async () => {
+      queuedTrim = null;
+      const cache = await caches.open(STATIC_CACHE);
+      const keys = await cache.keys();
+      // Keys come back in insertion order, so the oldest go first.
+      await Promise.all(keys.slice(0, Math.max(0, keys.length - MAX_STATIC_ENTRIES)).map((key) => cache.delete(key)));
+    });
+    trimQueue = queuedTrim.catch(() => {});
+  }
+  return queuedTrim;
 }
 
 async function networkFirstNavigation(request) {
@@ -72,12 +90,16 @@ async function networkFirstNavigation(request) {
   }
 }
 
-async function cacheFirstStatic(request) {
+async function cacheFirstStatic(event) {
   const cache = await caches.open(STATIC_CACHE);
-  const cached = await cache.match(request);
+  const cached = await cache.match(event.request);
   if (cached) return cached;
-  const response = await fetch(request);
-  if (cacheable(response)) await cache.put(request, response.clone());
+  const response = await fetch(event.request);
+  if (cacheable(response)) {
+    await cache.put(event.request, response.clone());
+    // Trim in the background: the response need not wait, but the worker must stay alive for it.
+    event.waitUntil(trimStaticCache());
+  }
   return response;
 }
 
@@ -100,5 +122,5 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const route = swRoute(event.request, self.location.origin);
   if (route === "navigate") event.respondWith(networkFirstNavigation(event.request));
-  else if (route === "static") event.respondWith(cacheFirstStatic(event.request));
+  else if (route === "static") event.respondWith(cacheFirstStatic(event));
 });
