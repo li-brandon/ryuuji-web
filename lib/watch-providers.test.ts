@@ -11,7 +11,7 @@ import { LibraryRepository, openLibraryDB } from "./storage";
 import { titleSchema, watchProviderDataSchema, type WatchProviderData } from "./types";
 import { fetchWatchProviders, refreshWatchProviders } from "./watch-provider-client";
 import { loadProviderCatalog, saveProviderCatalog, parsePreferences, WATCH_PREFERENCES_KEY } from "./watch-preferences";
-import { decodeServices, encodeServices, mapWatchProviders, mergeProviderCatalog, providerBadges, providerListSchema, watchLink, watchResponseSchema } from "./watch-providers";
+import { decodeServices, encodeServices, hasWatchOptions, mapWatchProviders, mergeProviderCatalog, providerBadges, providerListSchema, watchLink, watchResponseSchema } from "./watch-providers";
 
 const now = new Date("2026-05-28T20:26:40Z");
 const show = watchResponseSchema.parse(showResponse);
@@ -115,6 +115,34 @@ describe("web provider behavior", () => {
     expect(parsePreferences('{"region":"JP","services":[8]}')).toEqual({ region: "JP", services: [8] });
     expect(watchLink("javascript:alert(1)")).toBe("https://www.justwatch.com");
     expect(watchLink(show.results.US.link)).toBe(show.results.US.link);
+  });
+  it("keeps rent entries mixed into the response out of the stream list", () => {
+    const raw = (provider_id: number, provider_name: string, US: number) => ({ provider_id, provider_name, logo_path: null, display_priority: 99, display_priorities: { US } });
+    const response = watchResponseSchema.parse({ id: 1, results: { US: {
+      link: "https://www.themoviedb.org/movie/1/watch?locale=US",
+      flatrate: [raw(337, "Disney Plus", 4), raw(8, "Netflix", 1)],
+      rent: [raw(3, "Google Play Movies", 7), raw(8, "Netflix", 1), raw(2, "Apple TV", 2), raw(10, "Amazon Video", 5)],
+      buy: [raw(10, "Amazon Video", 5), raw(2, "Apple TV", 2)],
+    } } });
+    const result = mapWatchProviders(response, "US", now);
+    expect(result.providers.map((p) => p.name)).toEqual(["Netflix", "Disney Plus"]);
+    expect(result.rent.map((p) => p.name)).toEqual(["Netflix", "Apple TV", "Amazon Video", "Google Play Movies"]);
+    expect(result.buy.map((p) => p.name)).toEqual(["Apple TV", "Amazon Video"]);
+    expect(badges(result, [2, 3, 10]).shown).toEqual([]);
+    expect(badges(result, [3, 8]).shown.map((p) => p.name)).toEqual(["Netflix"]);
+  });
+  it("only allows https watch links", () => {
+    expect(watchLink("http://www.themoviedb.org/movie/1/watch?locale=US")).toBe("https://www.justwatch.com");
+    expect(watchLink("http://www.justwatch.com/us/movie/inception")).toBe("https://www.justwatch.com");
+    expect(watchLink("https://www.justwatch.com/us/movie/inception")).toBe("https://www.justwatch.com/us/movie/inception");
+  });
+  it("has watch options only when stream, rent or buy is non-empty", () => {
+    const empty = data([]);
+    expect(hasWatchOptions(null)).toBe(false);
+    expect(hasWatchOptions({ ...empty, link: "https://www.themoviedb.org/movie/1/watch" })).toBe(false);
+    expect(hasWatchOptions(data([8]))).toBe(true);
+    expect(hasWatchOptions({ ...empty, rent: data([3]).providers })).toBe(true);
+    expect(hasWatchOptions({ ...empty, buy: data([10]).providers })).toBe(true);
   });
   it("switches region and refuses late results from a previous region", async () => {
     const repo = await repository();
