@@ -167,6 +167,17 @@ export class WatchLogService {
     });
   }
 
+  /** Deletes every event of one bulk mark from History (LIB-444): one "Delete Batch" undo step that
+   * restores them all and the previous status. Status is recomputed like an unmark, as in `deleteEvent`. */
+  deleteBatch(key: TitleKey, batchId: string, undo?: UndoStack): Promise<void> {
+    return this.run(async () => {
+      const { events } = await this.load(key);
+      const doomed = events.filter((e) => e.batchId === batchId);
+      if (doomed.length === 0) return;
+      await this.perform("Delete Batch", key, "unmark", undo, () => ({ added: [], removed: doomed }));
+    });
+  }
+
   // Core
 
   private run<T>(operation: () => Promise<T>): Promise<T> {

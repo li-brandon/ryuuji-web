@@ -19,7 +19,8 @@ import { WatchLogService } from "@/lib/watch-log";
 import styles from "./history.module.css";
 
 // Ports the macOS Views/History/HistoryView: every watch event, newest first, grouped by day.
-// Deleting an event goes through WatchLogService, so progress and status follow, with one undo step.
+// Deleting an event, or a whole bulk mark from its collapsed row, goes through WatchLogService, so
+// progress and status follow, with one undo step.
 
 type Loaded = { entries: HistoryEntry[]; titles: Title[]; now: Date };
 
@@ -38,6 +39,16 @@ async function load(): Promise<Loaded> {
 function describe({ event, title }: HistoryEntry) {
   const name = title?.name ?? "Removed title";
   return event.kind === "movie" ? name : `${name} S${event.season ?? 0} · E${event.episode ?? 0}`;
+}
+
+const watchCount = (n: number) => `${n} watch${n === 1 ? "" : "es"}`;
+
+/** What a batch is called in labels: "12 watches of Frieren Season 1", without the season when it spans several. */
+function describeBatch(entries: HistoryEntry[]) {
+  const seasons = new Set(entries.map((e) => e.event.season));
+  const [season] = seasons;
+  const scope = seasons.size !== 1 || season === null ? "" : season === 0 ? " Specials" : ` Season ${season}`;
+  return `${watchCount(entries.length)} of ${entries[0].title?.name ?? "Removed title"}${scope}`;
 }
 
 export function History() {
@@ -65,9 +76,10 @@ export function History() {
     lock.current = true;
     setBusy(true);
     try {
+      const batch = undoStack.current.undoActionName === "Delete Batch";
       await undoStack.current.undo();
       await reload();
-      toast({ message: "Watch restored" });
+      toast({ message: batch ? "Watches restored" : "Watch restored" });
     } catch {
       toast({ message: "Couldn't undo. Please try again." });
     } finally {
@@ -89,27 +101,36 @@ export function History() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [undo]);
 
-  async function remove(entry: HistoryEntry) {
+  /** Runs one delete of `entry`'s title, then toasts what went (and any status change) with Undo. */
+  async function deleteWith(entry: HistoryEntry, what: string, messages: { gone: string; failed: string }, run: (service: WatchLogService) => Promise<void>) {
     if (lock.current) return;
     lock.current = true;
     setBusy(true);
     try {
       service.current ??= new WatchLogService(await libraryRepository());
       const before = undoStack.current.size;
-      await service.current.deleteEvent(entry.event.uid, undoStack.current);
+      await run(service.current);
       const loaded = await reload();
       const status = loaded.titles.find((t) => titleKeyId(t) === titleKeyId(entry.event))?.status;
       const statusNote = status && entry.title && status !== entry.title.status ? ` · now ${STATUS_LABELS[status]}` : "";
       toast(undoStack.current.size > before
-        ? { message: `Deleted ${describe(entry)}${statusNote}`, actionLabel: "Undo", onAction: () => void undo() }
-        : { message: "That watch was already gone" });
+        ? { message: `Deleted ${what}${statusNote}`, actionLabel: "Undo", onAction: () => void undo() }
+        : { message: messages.gone });
     } catch {
-      toast({ message: "Couldn't delete the watch. Please try again." });
+      toast({ message: messages.failed });
     } finally {
       lock.current = false;
       setBusy(false);
     }
   }
+
+  const remove = (entry: HistoryEntry) =>
+    deleteWith(entry, describe(entry), { gone: "That watch was already gone", failed: "Couldn't delete the watch. Please try again." }, (s) =>
+      s.deleteEvent(entry.event.uid, undoStack.current));
+
+  const removeBatch = (batchId: string, entries: HistoryEntry[]) =>
+    deleteWith(entries[0], `${watchCount(entries.length)} of ${entries[0].title?.name ?? "Removed title"}`, { gone: "Those watches were already gone", failed: "Couldn't delete the watches. Please try again." }, (s) =>
+      s.deleteBatch(entries[0].event, batchId, undoStack.current));
 
   const header = <header className="page-header"><h1>History</h1><p>Every episode and movie you’ve logged.</p></header>;
   if (error) return <>{header}<p role="alert">Couldn’t load your history. Reload to try again.</p></>;
@@ -154,12 +175,15 @@ export function History() {
                           <time dateTime={item.entries[0].event.watchedAt}>{timeFormat.format(new Date(item.entries[0].event.watchedAt))}</time>
                         </span>
                       </span>
+                      <span className={styles.batchDeleteSpace} aria-hidden="true" />
                       <span className={styles.chevron} aria-hidden="true">▾</span>
                     </summary>
                     <ul className={styles.list}>
                       {[...item.entries].sort((a, b) => (a.event.season ?? 0) - (b.event.season ?? 0) || (a.event.episode ?? 0) - (b.event.episode ?? 0)).map((entry) => row(entry, false))}
                     </ul>
                   </details>
+                  {/* Beside the summary rather than in it, so pressing it doesn't toggle the details. */}
+                  <Button className={styles.batchDelete} variant="ghost" icon="trash" disabled={busy} aria-label={`Delete all ${describeBatch(item.entries)}`} onClick={() => void removeBatch(item.id, item.entries)} />
                 </li>
               ))}
             </ul>

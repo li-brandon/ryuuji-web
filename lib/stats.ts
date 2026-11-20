@@ -203,13 +203,17 @@ export const byGenre = (events: StatsEvent[]) =>
     (a, b) => watches(b) - watches(a) || (a.label < b.label ? -1 : a.label > b.label ? 1 : 0),
   );
 
+/** Whether `score` is a whole number from 1 to 10, i.e. one the histogram counts. */
+export const isScore = (score: number | null): score is number =>
+  score !== null && Number.isInteger(score) && score >= 1 && score <= 10;
+
 /** Titles per score 1–10, with empty scores included. Unscored titles are ignored. */
 export function scoreHistogram(scores: (number | null)[]): ScoreBin[] {
-  const counts = new Map<number, number>();
+  const bins = Array.from({ length: 10 }, (_, i) => ({ score: i + 1, count: 0 }));
   for (const score of scores) {
-    if (score !== null && Number.isInteger(score) && score >= 1 && score <= 10) counts.set(score, (counts.get(score) ?? 0) + 1);
+    if (isScore(score)) bins[score - 1].count++;
   }
-  return Array.from({ length: 10 }, (_, i) => ({ score: i + 1, count: counts.get(i + 1) ?? 0 }));
+  return bins;
 }
 
 /**
