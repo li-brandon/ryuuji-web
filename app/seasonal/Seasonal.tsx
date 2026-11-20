@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, buttonClass } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { useToast } from "@/components/ui/Toast";
 import { AnimeSeason } from "@/lib/anime-season";
+import { useLibraryChanges } from "@/lib/library-changes";
 import { addTitle, itemId, posterUrl, titleHref } from "@/lib/quick-add";
 import { loadSeasonal, type SeasonalItem } from "@/lib/seasonal";
 import { libraryRepository } from "@/lib/storage";
@@ -51,13 +52,33 @@ function SeasonalResults({ season }: { season: AnimeSeason }) {
   const [addError, setAddError] = useState<string | null>(null);
   const toast = useToast();
   const { year, quarter } = season;
+  // Bumped whenever `titles` is set, so a library read that started earlier can't overwrite it.
+  const generation = useRef(0);
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
   useEffect(() => {
     let stale = false;
+    const started = generation.current;
     Promise.all([loadSeasonal(new AnimeSeason(year, quarter)), libraryRepository().then((repo) => repo.listTitles())])
-      .then(([items, library]) => { if (!stale) { setTitles(library); setPhase({ kind: "loaded", items }); } })
+      .then(([items, library]) => {
+        if (stale) return;
+        if (generation.current === started) { generation.current++; setTitles(library); }
+        setPhase({ kind: "loaded", items });
+      })
       .catch((error: unknown) => { if (!stale) setPhase({ kind: "failed", message: errorText(error) }); });
     return () => { stale = true; };
   }, [year, quarter, retry]);
+
+  // Another tab (or another part of this one) changed the library: re-read titles only, not TMDB.
+  const reloadTitles = useCallback(async () => {
+    const started = generation.current;
+    const library = await (await libraryRepository()).listTitles();
+    if (mounted.current && generation.current === started) { generation.current++; setTitles(library); }
+  }, []);
+  useLibraryChanges(reloadTitles);
 
   async function add(item: SeasonalItem) {
     const id = itemId(item);
@@ -68,6 +89,7 @@ function SeasonalResults({ season }: { season: AnimeSeason }) {
     try {
       // Default adds are not logging/status actions; addTitle owns status validation and undo rules.
       const { title, outcome } = await addTitle(await libraryRepository(), item);
+      generation.current++;
       setTitles((previous) => [...previous.filter((existing) => itemId(existing) !== id), title]);
       if (outcome === "added") toast({ message: `Added “${item.name}” to Plan to Watch` });
     } catch (error) {

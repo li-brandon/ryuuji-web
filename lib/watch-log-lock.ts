@@ -9,7 +9,8 @@ export function withWatchLogLock<T>(operation: () => Promise<T>): Promise<T> {
 
     // Without Web Locks, only this tab is serialized: concurrent tabs can still
     // write duplicate events or stale status. A notice lets other tabs reload;
-    // BroadcastChannel is not a cross-tab mutex.
+    // BroadcastChannel is not a cross-tab mutex. Repository writes announce
+    // themselves too, but metadata refreshes don't, so keep this notice.
     const value = await operation();
     if (typeof BroadcastChannel !== "undefined") {
       try {
