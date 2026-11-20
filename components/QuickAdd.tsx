@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icon";
@@ -13,8 +13,10 @@ import { useToast } from "@/components/ui/Toast";
 import {
   addTitle,
   existingTitleHref,
+  isApplePlatform,
   isQuickAddShortcut,
   itemId,
+  modKeyLabel,
   moveSelection,
   posterUrl,
   searchTitles,
@@ -37,6 +39,9 @@ const DEBOUNCE_MS = 300;
 const OPEN_EVENT = "ryuuji:quick-add";
 
 type Phase = { kind: "idle" | "searching" | "done" } | { kind: "failed"; message: string };
+type PendingAdd = { item: SearchItem; status: ListStatus };
+
+const noSubscribe = () => () => {};
 
 const errorText = (error: unknown) =>
   error instanceof TMDBRequestError && error.status === 503
@@ -57,6 +62,8 @@ export function QuickAdd() {
   const [inLibrary, setInLibrary] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState<string | null>(null);
+  const pending = useRef<PendingAdd | null>(null);
+  const mod = modKeyLabel(useSyncExternalStore(noSubscribe, () => isApplePlatform(), () => false));
   const listId = useId();
   const router = useRouter();
   const toast = useToast();
@@ -90,17 +97,18 @@ export function QuickAdd() {
   useEffect(() => {
     const trimmed = query.trim();
     if (!open || !trimmed) return;
-    let stale = false;
+    const controller = new AbortController();
     const timer = setTimeout(async () => {
       setPhase({ kind: "searching" });
       try {
-        const found = await searchTitles(trimmed);
-        if (stale) return;
+        const found = await searchTitles(trimmed, undefined, controller.signal);
+        if (controller.signal.aborted) return;
         setResults(found);
         setSelected(found.length ? 0 : -1);
         setPhase({ kind: "done" });
       } catch (error) {
-        if (stale) return;
+        // Aborted by a newer query or by closing the panel; not a failure.
+        if (controller.signal.aborted) return;
         setResults([]);
         setSelected(-1);
         if (error instanceof TMDBRequestError && error.status === 401) {
@@ -112,8 +120,8 @@ export function QuickAdd() {
       }
     }, DEBOUNCE_MS);
     return () => {
-      stale = true;
       clearTimeout(timer);
+      controller.abort();
     };
   }, [open, query, retry]);
 
@@ -133,6 +141,7 @@ export function QuickAdd() {
     setSelected(-1);
     setPhase({ kind: "idle" });
     setMessage(null);
+    pending.current = null;
   }
 
   function onQueryChange(value: string) {
@@ -150,12 +159,17 @@ export function QuickAdd() {
   }
 
   async function undo() {
+    const added = undoStack.current.undoActionName === "Add Title";
     try {
       await undoStack.current.undo();
-      toast({ message: "Status change undone" });
+      toast({ message: added ? "Add undone" : "Status change undone" });
     } catch {
-      toast({ message: "Couldn't undo the status change. Please try again." });
+      toast({ message: `Couldn't undo the ${added ? "add" : "status change"}. Please try again.` });
     }
+    libraryRepository()
+      .then((repo) => repo.listTitles())
+      .then((titles) => setInLibrary(new Set(titles.map(itemId))))
+      .catch(() => {});
   }
 
   async function add(item: SearchItem, status: ListStatus = "planToWatch") {
@@ -166,14 +180,18 @@ export function QuickAdd() {
     setMessage(null);
     setAdding((s) => new Set(s).add(id));
     try {
-      const { outcome } = await addTitle(await libraryRepository(), item, status, { undo: undoStack.current });
+      const repo = await libraryRepository();
+      const { outcome } = await addTitle(repo, item, status, { undo: undoStack.current });
       setInLibrary((s) => new Set(s).add(id));
       if (outcome === "existing") return openTitle(titleHref(item));
-      setMessage(`Added “${item.name}” to ${STATUS_LABELS[status]}.`);
-      if (status !== "planToWatch") toast({ message: `Added “${item.name}” as ${STATUS_LABELS[status]}`, actionLabel: "Undo", onAction: () => void undo() });
+      // A non-default status registers its own undo step through WatchLogService.setStatus.
+      if (status === "planToWatch") undoStack.current.register("Add Title", () => repo.deleteTitle(item));
+      toast({ message: `Added “${item.name}” to ${STATUS_LABELS[status]}`, actionLabel: "Undo", onAction: () => void undo() });
     } catch (error) {
-      if (error instanceof TMDBRequestError && error.status === 401) setNeedsPasscode(true);
-      else setMessage(`Couldn't add “${item.name}”: ${errorText(error)}`);
+      if (error instanceof TMDBRequestError && error.status === 401) {
+        pending.current = { item, status };
+        setNeedsPasscode(true);
+      } else setMessage(`Couldn't add “${item.name}”: ${errorText(error)}`);
     } finally {
       setAdding((s) => {
         const next = new Set(s);
@@ -202,10 +220,10 @@ export function QuickAdd() {
 
   return (
     <>
-      <button type="button" className={styles.trigger} onClick={() => setOpen(true)} aria-haspopup="dialog" aria-label="Search (⌘K)">
+      <button type="button" className={styles.trigger} onClick={() => setOpen(true)} aria-haspopup="dialog" aria-label={`Search (${mod}K)`}>
         <Icon name="search" />
         <span className={styles.label}>Search</span>
-        <kbd className={styles.kbd}>⌘K</kbd>
+        <kbd className={styles.kbd}>{mod}K</kbd>
       </button>
       <Sheet open={open} onClose={reset} label="Search movies and shows" className={styles.sheet}>
         <div className={styles.panel}>
@@ -239,6 +257,9 @@ export function QuickAdd() {
                 setNeedsPasscode(false);
                 setRetry((n) => n + 1);
                 input.current?.focus();
+                const retryAdd = pending.current;
+                pending.current = null;
+                if (retryAdd) void add(retryAdd.item, retryAdd.status);
               }}
             />
           )}
@@ -266,7 +287,7 @@ export function QuickAdd() {
                   aria-keyshortcuts={`Meta+${i + 1} Control+${i + 1}`}
                   onClick={() => void add(results[selected], status)}
                 >
-                  <kbd>⌘{i + 1}</kbd> {STATUS_LABELS[status]}
+                  <kbd>{mod}{i + 1}</kbd> {STATUS_LABELS[status]}
                 </button>
               ))}
             </div>

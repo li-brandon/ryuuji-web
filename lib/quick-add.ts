@@ -55,11 +55,11 @@ export function toSearchItem(result: TMDBSearchResult, kind: Kind): SearchItem {
 }
 
 /** Movies and shows matching `query`, most popular first (like TMDB's multi search). */
-export async function searchTitles(query: string, fetcher: Fetcher = tmdbFetch): Promise<SearchItem[]> {
+export async function searchTitles(query: string, fetcher: Fetcher = tmdbFetch, signal?: AbortSignal): Promise<SearchItem[]> {
   const params = { query, include_adult: false, page: 1 };
   const [movies, shows] = await Promise.all([
-    fetcher<TMDBPage>("search/movie", params),
-    fetcher<TMDBPage>("search/tv", params),
+    fetcher<TMDBPage>("search/movie", params, signal),
+    fetcher<TMDBPage>("search/tv", params, signal),
   ]);
   return [
     ...movies.results.map((r) => ({ r, item: toSearchItem(r, "movie") })),
@@ -214,5 +214,16 @@ export function moveSelection(current: number, delta: number, count: number): nu
 /** Cmd-K on macOS, Ctrl-K elsewhere. */
 export const isQuickAddShortcut = (e: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey">) =>
   (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k";
+
+type NavigatorLike = { platform?: string; userAgent?: string; userAgentData?: { platform?: string } };
+
+/** True on macOS, iOS and iPadOS, where shortcuts use Cmd. False during SSR. */
+export function isApplePlatform(nav: NavigatorLike | undefined = typeof navigator === "undefined" ? undefined : navigator): boolean {
+  if (!nav) return false;
+  return /mac|iphone|ipad|ipod/i.test(nav.userAgentData?.platform || nav.platform || nav.userAgent || "");
+}
+
+/** The shortcut modifier as shown in hints: "⌘" on Apple platforms, "Ctrl-" elsewhere. */
+export const modKeyLabel = (apple: boolean) => (apple ? "⌘" : "Ctrl-");
 
 export const posterUrl = (path: string | null, size = "w92") => (path ? `https://image.tmdb.org/t/p/${size}${path}` : null);

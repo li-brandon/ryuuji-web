@@ -1,9 +1,12 @@
 import "fake-indexeddb/auto";
-import { openDB } from "idb";
+import { deleteDB, openDB } from "idb";
 import { IDBObjectStore } from "fake-indexeddb";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  DB_NAME,
+  DB_VERSION,
   DuplicateTitleError,
+  libraryRepository,
   LibraryRepository,
   openLibraryDB,
   requestPersistentStorage,
@@ -203,4 +206,14 @@ it("handles a failed IndexedDB request and its transaction rejection together", 
   expect(await repo.listWatchEvents(title())).toEqual([event("a")]);
   await repo.addWatchEvent(event("b"));
   expect(await repo.listWatchEvents(title())).toHaveLength(2);
+});
+
+it("retries opening the shared library after a failed open", async () => {
+  // A newer on-disk version makes the first open fail with a VersionError.
+  (await openDB(DB_NAME, DB_VERSION + 1)).close();
+  await expect(libraryRepository()).rejects.toMatchObject({ name: "VersionError" });
+  await deleteDB(DB_NAME);
+  const repo = await libraryRepository();
+  expect(repo).toBeInstanceOf(LibraryRepository);
+  expect(await libraryRepository()).toBe(repo);
 });
