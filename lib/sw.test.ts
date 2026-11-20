@@ -19,52 +19,89 @@ const request = (path: string, init: Partial<FakeRequest> = {}): FakeRequest => 
 });
 const keyOf = (key: string | FakeRequest) => new URL(typeof key === "string" ? key : key.url, ORIGIN).href;
 
-function fakeCaches() {
+type Fetch = (input: string | FakeRequest) => Promise<Response>;
+
+/** Like the Cache API's: fetches every key from the network, and stores none unless all are OK. */
+function fakeCaches(fetch: Fetch) {
   const stores = new Map<string, Map<string, Response>>();
+  const keysCalls = vi.fn<(name: string) => void>();
   const open = async (name: string) => {
     if (!stores.has(name)) stores.set(name, new Map());
     const store = stores.get(name)!;
     return {
       match: async (key: string | FakeRequest) => store.get(keyOf(key))?.clone(),
       put: async (key: string | FakeRequest, response: Response) => void store.set(keyOf(key), response),
-      addAll: async (keys: string[]) => keys.forEach((key) => store.set(keyOf(key), new Response(`asset ${key}`))),
-      keys: async () => [...store.keys()].map((url) => ({ url })),
+      addAll: async (keys: string[]) => {
+        const responses = await Promise.all(keys.map((key) => fetch(key)));
+        const failed = responses.findIndex((response) => !response.ok);
+        if (failed >= 0) throw new TypeError(`addAll: ${keys[failed]} failed`);
+        responses.forEach((response, i) => store.set(keyOf(keys[i]), response));
+      },
+      keys: async () => {
+        keysCalls(name);
+        return [...store.keys()].map((url) => ({ url }));
+      },
       delete: async (key: FakeRequest) => store.delete(keyOf(key)),
     };
   };
-  return { stores, open, keys: async () => [...stores.keys()], delete: async (name: string) => stores.delete(name) };
+  return { stores, keysCalls, open, keys: async () => [...stores.keys()], delete: async (name: string) => stores.delete(name) };
 }
 
 /** A same-origin 200 response, as `fetch` would return it (Node's Response has type "default"). */
 const ok = (body: string) => Object.defineProperty(new Response(body), "type", { value: "basic" });
+/** A 200 that followed a redirect. */
+const redirected = (body: string) => Object.defineProperty(ok(body), "redirected", { value: true });
+/** A no-cors ("opaque") or manual-redirect ("opaqueredirect") response: status 0, unreadable. */
+const opaque = (type: "opaque" | "opaqueredirect") =>
+  Object.defineProperties(new Response(null), { type: { value: type }, status: { value: 0 }, ok: { value: false } });
 
 function load() {
   const listeners = new Map<string, Listener>();
-  const caches = fakeCaches();
-  const fetch = vi.fn<(input: string | FakeRequest) => Promise<Response>>();
+  const fetch = vi.fn<Fetch>();
+  const caches = fakeCaches(fetch);
   const self = {
     location: { origin: ORIGIN },
     addEventListener: (type: string, listener: Listener) => listeners.set(type, listener),
     skipWaiting: vi.fn(async () => {}),
     clients: { claim: vi.fn(async () => {}) },
   };
-  const sandbox = runInNewContext(`${source}\n;({ swRoute, staticAssetsIn })`, { self, caches, fetch, URL }) as {
+  const sandbox = runInNewContext(`${source}\n;({ swRoute, staticAssetsIn, MAX_STATIC_ENTRIES, STATIC_CACHE })`, {
+    self,
+    caches,
+    fetch,
+    URL,
+  }) as {
     swRoute: (request: FakeRequest, origin: string) => Route;
     staticAssetsIn: (html: string) => string[];
+    MAX_STATIC_ENTRIES: number;
+    STATIC_CACHE: string;
   };
 
+  // Promises passed to fetch events' waitUntil, so tests can wait for background work.
+  const extended: Promise<unknown>[] = [];
   /** Dispatches a fetch event; returns the response promise, or null if the worker passed. */
   const dispatchFetch = (req: FakeRequest) => {
     let responded: Promise<Response> | null = null;
-    listeners.get("fetch")!({ request: req, respondWith: (p: Promise<Response>) => void (responded = p) });
+    listeners.get("fetch")!({
+      request: req,
+      respondWith: (p: Promise<Response>) => void (responded = p),
+      waitUntil: (p: Promise<unknown>) => void extended.push(p),
+    });
     return responded as Promise<Response> | null;
   };
+  /** Waits for every fetch event's response and background work so far. */
+  const settled = async (responses: (Promise<Response> | null)[] = []) => {
+    await Promise.all(responses);
+    await Promise.all(extended);
+  };
+  /** Paths in the static cache, oldest first. */
+  const staticPaths = () => [...(caches.stores.get(sandbox.STATIC_CACHE)?.keys() ?? [])].map((url) => new URL(url).pathname);
   const dispatchLifecycle = async (type: "install" | "activate") => {
     let done: Promise<unknown> = Promise.resolve();
     listeners.get(type)!({ waitUntil: (p: Promise<unknown>) => void (done = p) });
     await done;
   };
-  return { ...sandbox, caches, fetch, self, dispatchFetch, dispatchLifecycle };
+  return { ...sandbox, caches, fetch, self, dispatchFetch, dispatchLifecycle, settled, staticPaths };
 }
 
 let sw: ReturnType<typeof load>;
@@ -139,6 +176,66 @@ describe("fetch handler", () => {
     expect(await (await sw.dispatchFetch(request("/_next/static/chunks/a.js"))!).text()).toBe("chunk");
     expect(sw.fetch).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    ["redirected", () => redirected("login page")],
+    ["opaqueredirect", () => opaque("opaqueredirect")],
+  ])("does not cache %s navigations", async (_, response) => {
+    sw.fetch.mockResolvedValueOnce(response());
+    await sw.settled([sw.dispatchFetch(request("/library", { mode: "navigate" }))]);
+    expect([...sw.caches.stores.values()].every((store) => store.size === 0)).toBe(true);
+    sw.fetch.mockRejectedValueOnce(new TypeError("offline"));
+    await expect(sw.dispatchFetch(request("/library", { mode: "navigate" }))!).rejects.toThrow("offline");
+  });
+
+  it.each([
+    ["redirected", () => redirected("chunk")],
+    ["opaque", () => opaque("opaque")],
+    ["opaqueredirect", () => opaque("opaqueredirect")],
+    ["cross-origin (cors)", () => Object.defineProperty(new Response("chunk"), "type", { value: "cors" })],
+  ])("does not cache %s static assets", async (_, response) => {
+    sw.fetch.mockResolvedValueOnce(response()).mockResolvedValueOnce(response());
+    await sw.settled([sw.dispatchFetch(request("/_next/static/chunks/a.js"))]);
+    await sw.settled([sw.dispatchFetch(request("/_next/static/chunks/a.js"))]);
+    expect(sw.fetch).toHaveBeenCalledTimes(2);
+    expect(sw.staticPaths()).toEqual([]);
+  });
+});
+
+describe("static cache size", () => {
+  const chunk = (i: number) => `/_next/static/chunks/${i}.js`;
+  const fill = async (from: number, to: number) => {
+    for (let i = from; i < to; i++) await sw.settled([sw.dispatchFetch(request(chunk(i)))]);
+  };
+  beforeEach(() => sw.fetch.mockImplementation(async (input) => ok(`chunk ${String(input)}`)));
+
+  it("is trimmed oldest first as assets are fetched, without an activate", async () => {
+    await fill(0, sw.MAX_STATIC_ENTRIES);
+    expect(sw.staticPaths()).toHaveLength(sw.MAX_STATIC_ENTRIES);
+    await sw.settled([0, 1, 2].map((i) => sw.dispatchFetch(request(chunk(sw.MAX_STATIC_ENTRIES + i)))));
+    const paths = sw.staticPaths();
+    expect(paths).toHaveLength(sw.MAX_STATIC_ENTRIES);
+    expect(paths).not.toContain(chunk(2));
+    expect(paths[0]).toBe(chunk(3));
+    expect(paths.slice(-3)).toEqual([0, 1, 2].map((i) => chunk(sw.MAX_STATIC_ENTRIES + i)));
+  });
+
+  it("runs one trim for a burst of concurrent cache misses", async () => {
+    await fill(0, sw.MAX_STATIC_ENTRIES);
+    sw.caches.keysCalls.mockClear();
+    await sw.settled(Array.from({ length: 10 }, (_, i) => sw.dispatchFetch(request(chunk(sw.MAX_STATIC_ENTRIES + i)))));
+    expect(sw.staticPaths()).toHaveLength(sw.MAX_STATIC_ENTRIES);
+    expect(sw.staticPaths()[0]).toBe(chunk(10));
+    expect(sw.caches.keysCalls.mock.calls.length).toBeLessThanOrEqual(2);
+  });
+
+  it("is trimmed after precaching, without an activate", async () => {
+    const assets = Array.from({ length: sw.MAX_STATIC_ENTRIES + 5 }, (_, i) => `<script src="${chunk(i)}"></script>`).join("");
+    sw.fetch.mockImplementation(async (input) => ok(input === "/" ? assets : String(input)));
+    await sw.dispatchLifecycle("install");
+    expect(sw.staticPaths()).toHaveLength(sw.MAX_STATIC_ENTRIES);
+    expect(sw.staticPaths()[0]).toBe(chunk(5));
+  });
 });
 
 describe("install and activate", () => {
@@ -149,6 +246,35 @@ describe("install and activate", () => {
     expect([...shell.keys()].map((url) => new URL(url).pathname)).toEqual(expect.arrayContaining(["/", "/library", "/about"]));
     expect([...assets.keys()]).toContain(`${ORIGIN}/_next/static/chunks/home.js`);
     expect(sw.self.skipWaiting).toHaveBeenCalled();
+  });
+
+  describe("fails, without skipping waiting, when precaching fails", () => {
+    const shell = async (input: string | FakeRequest) => ok(`<script src="/_next/static/chunks/${String(input).slice(1) || "home"}.js"></script>`);
+
+    it.each([
+      ["an error page", () => Object.defineProperty(new Response("down", { status: 500 }), "type", { value: "basic" })],
+      ["a redirect", () => redirected("login page")],
+      ["an opaque redirect", () => opaque("opaqueredirect")],
+    ])("a shell page is %s", async (_, response) => {
+      sw.fetch.mockImplementation(async (input) => (input === "/library" ? response() : shell(input)));
+      await expect(sw.dispatchLifecycle("install")).rejects.toThrow("Precache failed for /library");
+      expect(sw.self.skipWaiting).not.toHaveBeenCalled();
+    });
+
+    it("a static asset fails to load", async () => {
+      sw.fetch.mockImplementation(async (input) =>
+        input === "/_next/static/chunks/stats.js" ? new Response("gone", { status: 404 }) : shell(input),
+      );
+      await expect(sw.dispatchLifecycle("install")).rejects.toThrow("/_next/static/chunks/stats.js");
+      expect(sw.self.skipWaiting).not.toHaveBeenCalled();
+      expect(sw.staticPaths()).toEqual([]);
+    });
+
+    it("the network is down", async () => {
+      sw.fetch.mockImplementation(async (input) => (input === "/settings" ? Promise.reject(new TypeError("offline")) : shell(input)));
+      await expect(sw.dispatchLifecycle("install")).rejects.toThrow("offline");
+      expect(sw.self.skipWaiting).not.toHaveBeenCalled();
+    });
   });
 
   it("finds static assets in HTML and escaped RSC payloads", () => {

@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import manifest from "@/app/manifest";
 import nextConfig from "@/next.config";
 import { APP_NAME } from "@/lib/app";
-import { ICON_BACKGROUND, THEME_COLORS } from "@/lib/pwa";
+import { ICON_BACKGROUND, registerServiceWorker, THEME_COLORS } from "@/lib/pwa";
 
 const tokens = readFileSync(new URL("../app/tokens.css", import.meta.url), "utf8");
 const token = (name: string) => {
@@ -49,5 +49,36 @@ describe("next.config headers", () => {
       "Cache-Control": "no-cache",
       "Service-Worker-Allowed": "/",
     });
+  });
+});
+
+describe("registerServiceWorker", () => {
+  const browser = (register = vi.fn(async () => ({}) as ServiceWorkerRegistration)) => ({
+    register,
+    nav: { serviceWorker: { register } as unknown as ServiceWorkerContainer },
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it("registers /sw.js at the root, bypassing the HTTP cache, in production", () => {
+    const { register, nav } = browser();
+    expect(registerServiceWorker("production", nav)).toBe(true);
+    expect(register).toHaveBeenCalledExactlyOnceWith("/sw.js", { scope: "/", updateViaCache: "none" });
+  });
+
+  it.each(["development", "test", undefined])("does not register when NODE_ENV is %s", (nodeEnv) => {
+    const { register, nav } = browser();
+    expect(registerServiceWorker(nodeEnv, nav)).toBe(false);
+    expect(register).not.toHaveBeenCalled();
+  });
+
+  it("does nothing without service worker support", () => {
+    expect(registerServiceWorker("production", {})).toBe(false);
+  });
+
+  it("logs a failed registration instead of throwing", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { nav } = browser(vi.fn(async () => Promise.reject(new Error("insecure"))));
+    expect(registerServiceWorker("production", nav)).toBe(true);
+    await vi.waitFor(() => expect(warn).toHaveBeenCalledWith("Service worker registration failed", expect.any(Error)));
   });
 });

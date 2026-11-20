@@ -1,14 +1,12 @@
 "use client";
 
 import { useEffect } from "react";
+import { registerServiceWorker } from "@/lib/pwa";
 
-/** Registers public/sw.js in production builds, so dev servers never serve stale cached pages. */
+/** Registers public/sw.js in production builds (see `registerServiceWorker`). */
 export function ServiceWorker() {
   useEffect(() => {
-    if (process.env.NODE_ENV !== "production" || !("serviceWorker" in navigator)) return;
-    navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" }).catch((error: unknown) => {
-      console.warn("Service worker registration failed", error);
-    });
+    registerServiceWorker(process.env.NODE_ENV, navigator);
   }, []);
   return null;
 }

@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { JustWatchAttribution } from "@/components/WatchProviders";
 import { APP_NAME, APP_TAGLINE, TMDB_NOTICE } from "@/lib/app";
+import { APP_VERSION } from "@/lib/server/app-version";
 import styles from "./about.module.css";
 
 // Port of the macOS AboutView. TMDB's terms: their logo must be less prominent than our own
@@ -16,6 +17,7 @@ export default function AboutPage() {
         </span>
         <h1>{APP_NAME}</h1>
         <p>{APP_TAGLINE}</p>
+        <p className={styles.version}>Version {APP_VERSION}</p>
       </header>
       <div className="stack">
         <section className="section" aria-labelledby="about-data">

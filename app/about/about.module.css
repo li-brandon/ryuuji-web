@@ -18,6 +18,11 @@
   color: var(--text-2);
 }
 
+.hero .version {
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
 /* The sidebar's brand mark at app-icon scale. */
 .mark {
   display: grid;
