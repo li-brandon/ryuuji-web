@@ -2,10 +2,11 @@
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { posterUrl } from "@/lib/quick-add";
+import { createLimiter } from "@/lib/request-queue";
 import { libraryRepository } from "@/lib/storage";
 import { refreshWatchProviders } from "@/lib/watch-provider-client";
 import { DEFAULT_PREFERENCES, parsePreferences, preferenceSnapshot, subscribeWatchPreferences } from "@/lib/watch-preferences";
-import { JUSTWATCH_URL, providerBadges, watchLink } from "@/lib/watch-providers";
+import { hasWatchOptions, JUSTWATCH_URL, providerBadges, watchLink } from "@/lib/watch-providers";
 import type { ProviderInfo, Title, WatchProviderData } from "@/lib/types";
 import styles from "./watch-providers.module.css";
 
@@ -15,7 +16,10 @@ export function useWatchPreferences() {
 }
 
 // Detail and badges may mount together; share the same request for a title and region.
-const pending = new Map<string, Promise<void>>();
+// Library and Up Next mount many badges at once, so only a few refreshes run at a time.
+const limit = createLimiter(3);
+type PendingRefresh = { request: Promise<void>; controller: AbortController; users: number; started: boolean };
+const pending = new Map<string, PendingRefresh>();
 function useProviderData(title: Title, region: string) {
   const [loaded, setLoaded] = useState<WatchProviderData | null>(null);
   const fromTitle = title.providerData?.region === region ? title.providerData : null;
@@ -25,16 +29,31 @@ function useProviderData(title: Title, region: string) {
     if (cached) return;
     let cancelled = false;
     const id = `${kind}-${tmdbId}-${region}`;
-    let request = pending.get(id);
-    if (!request) {
-      request = libraryRepository().then((repo) => refreshWatchProviders(repo, { kind, tmdbId }, region)).finally(() => pending.delete(id));
-      pending.set(id, request);
+    let entry = pending.get(id);
+    if (!entry) {
+      const controller = new AbortController();
+      const created: PendingRefresh = { controller, users: 0, started: false, request: Promise.resolve() };
+      created.request = limit(async () => {
+        created.started = true;
+        await refreshWatchProviders(await libraryRepository(), { kind, tmdbId }, region);
+      }, controller.signal).finally(() => { if (pending.get(id) === created) pending.delete(id); });
+      pending.set(id, created);
+      entry = created;
     }
-    void request.then(async () => {
+    const shared = entry;
+    shared.users++;
+    void shared.request.then(async () => {
       const current = await (await libraryRepository()).getTitle({ kind, tmdbId });
       if (!cancelled) setLoaded(current?.providerData ?? null);
     }).catch(() => {});
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      // Skip a queued refresh nobody is waiting for; a started one finishes and fills the cache.
+      if (--shared.users === 0 && !shared.started) {
+        shared.controller.abort();
+        pending.delete(id);
+      }
+    };
   }, [cached, region, tmdbId, kind]);
   return cached;
 }
@@ -64,8 +83,8 @@ export function WhereToWatch({ title }: { title: Title }) {
   const groups = [{ label: "Stream", providers: data?.providers ?? [] }, { label: "Rent", providers: data?.rent ?? [] }, { label: "Buy", providers: data?.buy ?? [] }];
   return <section className={styles.section} aria-labelledby="where-to-watch">
     <h2 id="where-to-watch">Where to watch <span className={styles.region}>{region}</span></h2>
-    {data ? groups.some((group) => group.providers.length) ? groups.map(({ label, providers }) => providers.length > 0 && <div key={label} className={styles.group}><h3>{label}</h3><ul className={styles.providers}>{providers.map((provider) => <li key={provider.id} className={services.includes(provider.id) ? styles.selected : styles.provider}><ProviderLogo provider={provider} />{services.includes(provider.id) && <span className={styles.mine}>My service</span>}</li>)}</ul></div>) : <p>No streaming, rental or purchase options listed in {region}.</p> : <p>Availability isn’t cached for {region}. Connect to TMDB or use Refresh to try again.</p>}
-    {data?.link && <a className={styles.attribution} href={watchLink(data.link)} target="_blank" rel="noreferrer">Watch options on TMDB</a>}
+    {data ? hasWatchOptions(data) ? groups.map(({ label, providers }) => providers.length > 0 && <div key={label} className={styles.group}><h3>{label}</h3><ul className={styles.providers}>{providers.map((provider) => <li key={provider.id} className={services.includes(provider.id) ? styles.selected : styles.provider}><ProviderLogo provider={provider} />{services.includes(provider.id) && <span className={styles.mine}>My service</span>}</li>)}</ul></div>) : <p>No streaming, rental or purchase options listed in {region}.</p> : <p>Availability isn’t cached for {region}. Connect to TMDB or use Refresh to try again.</p>}
+    {hasWatchOptions(data) && data.link && <a className={styles.attribution} href={watchLink(data.link)} target="_blank" rel="noreferrer">Watch options on TMDB</a>}
     <JustWatchAttribution />
   </section>;
 }

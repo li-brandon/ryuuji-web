@@ -591,11 +591,15 @@
     color var(--duration) var(--ease-out);
 }
 
-/* 44px hit area. */
+/* Centered hit area of at least 44×44px, wider than the 38px icon-only segments too. */
 .segment::after {
   content: "";
   position: absolute;
-  inset: -3px 0;
+  top: 50%;
+  left: 50%;
+  width: max(100%, var(--tap));
+  height: max(100%, var(--tap));
+  translate: -50% -50%;
 }
 
 .segment:has(input:checked) {

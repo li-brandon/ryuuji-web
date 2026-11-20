@@ -45,6 +45,10 @@ export function providerBadges(data: WatchProviderData | null, region: string, s
   const matching = data?.region === region ? data.providers.filter((p) => services.has(p.id)).sort(byPriority) : [];
   return { shown: matching.slice(0, 5), overflow: Math.max(0, matching.length - 5) };
 }
+/** True when cached data lists at least one stream, rent or buy option. */
+export function hasWatchOptions(data: WatchProviderData | null | undefined): data is WatchProviderData {
+  return !!data && data.providers.length + data.rent.length + data.buy.length > 0;
+}
 export function decodeServices(raw: string): Set<number> {
   return new Set(raw.split(",").map((v) => v.trim()).filter((v) => /^\d+$/.test(v)).map(Number));
 }
