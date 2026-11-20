@@ -23,7 +23,7 @@ it("imports the real exporter fixture, previews counts, broadcasts under lock an
   const plan = await previewImport(repo, JSON.stringify(fixture));
   expect(plan.counts).toEqual({ titlesToAdd: 3, titlesToMerge: 0, titlesUnchanged: 0, eventsToAdd: 3, eventsAlreadyPresent: 0, conflicts: 0 });
   await repo.importLibrary(plan);
-  expect(locked).toHaveBeenCalledOnce(); expect(posted).toHaveBeenCalledWith("changed");
+  expect(locked).toHaveBeenCalledOnce(); expect(posted).toHaveBeenCalledWith({ tab: expect.any(String) });
   const exported = await exportLibrary(repo, new Date(fixture.exportedAt));
   expect(exported).toEqual({ ...readLibraryFile(fixture), exportedAt: new Date(fixture.exportedAt).toISOString(), settings: exported.settings });
   const put = vi.spyOn(IDBObjectStore.prototype, "put");

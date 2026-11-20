@@ -3,6 +3,8 @@
 import { useEffect } from "react";
 
 export const LIBRARY_CHANGED = "ryuuji-library";
+// Tags this tab's channel messages: it already reloads from its own window event.
+const TAB = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
 /**
  * Calls `reload` whenever the library changes in this tab or another one. `reload` must only read:
@@ -30,7 +32,7 @@ export function useLibraryChanges(reload: () => Promise<unknown>) {
     };
     window.addEventListener(LIBRARY_CHANGED, listener);
     const channel = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel(LIBRARY_CHANGED);
-    channel?.addEventListener("message", listener);
+    channel?.addEventListener("message", (message: MessageEvent) => { if (message.data?.tab !== TAB) listener(); });
     return () => {
       window.removeEventListener(LIBRARY_CHANGED, listener);
       channel?.close();
@@ -46,7 +48,7 @@ export function notifyLibraryChanged() {
   if (typeof BroadcastChannel !== "undefined") {
     try {
       const channel = new BroadcastChannel(LIBRARY_CHANGED);
-      try { channel.postMessage("changed"); } finally { channel.close(); }
+      try { channel.postMessage({ tab: TAB }); } finally { channel.close(); }
     } catch { /* Data has already committed. */ }
   }
 }

@@ -221,7 +221,7 @@ describe("library change notices", () => {
     for (const write of writes) {
       posted.mockClear();
       await write();
-      expect(posted).toHaveBeenCalledExactlyOnceWith("changed");
+      expect(posted).toHaveBeenCalledExactlyOnceWith({ tab: expect.any(String) });
     }
     expect(await repo.listTitles()).toEqual([]);
     expect(await repo.listWatchEvents(title())).toEqual([]);

@@ -17,8 +17,28 @@ it("notifies this tab with an event and other tabs over the channel", async () =
   const received = new Promise((resolve) => other.addEventListener("message", (message) => resolve(message.data), { once: true }));
   notifyLibraryChanged();
   expect(local).toHaveBeenCalledOnce();
-  expect(await received).toBe("changed");
+  expect(await received).toEqual({ tab: expect.any(String) });
   other.close();
+});
+
+it("reloads once for this tab's own change but still reloads for other tabs' messages", async () => {
+  vi.stubGlobal("window", new EventTarget());
+  const reload = vi.fn(() => Promise.resolve());
+  useLibraryChanges(reload);
+  const observer = new BroadcastChannel(LIBRARY_CHANGED);
+  const delivered = () => new Promise((resolve) => observer.addEventListener("message", resolve, { once: true }));
+  const own = delivered();
+  notifyLibraryChanged();
+  await own;
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(reload).toHaveBeenCalledOnce();
+  const otherTab = new BroadcastChannel(LIBRARY_CHANGED);
+  const foreign = delivered();
+  otherTab.postMessage({ tab: "another-tab" });
+  await foreign;
+  await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(2));
+  otherTab.close();
+  observer.close();
 });
 
 it("reloads on notices, runs one more reload for a burst and stops after cleanup", async () => {
