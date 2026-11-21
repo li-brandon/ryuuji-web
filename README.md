@@ -62,6 +62,10 @@ Set in Vercel for Production and Preview, marked Sensitive (see [Environment var
 - `RYUUJI_SESSION_SECRET` (at least 32 characters; `openssl rand -base64 48`)
 - `RYUUJI_SESSION_NOT_BEFORE` (optional)
 
+## Backup and import
+
+- Settings → Backup & import exports the library as JSON and imports a Ryuuji backup or macOS library export after a preview (`lib/library-import.ts`). An imported Plan to Watch status only applies to new titles; it never replaces the status of a title already in the library.
+
 ## Install and offline (PWA)
 
 - `app/manifest.ts` serves `/manifest.webmanifest` (standalone, start URL `/`). Icons are generated PNGs: `app/icon.tsx` (`/icon/192`, `/icon/512`), `app/maskable-icon/route.tsx` (maskable 512) and `app/apple-icon.tsx` (iOS home screen). Theme colors live in `lib/pwa.ts`, kept in sync with `app/tokens.css` by a test.
