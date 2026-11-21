@@ -5,13 +5,13 @@ import type { LibrarySettings } from "./library-schema";
 import { z } from "zod";
 import { LIBRARY_FORMAT, LIBRARY_SCHEMA_VERSION, parseLibraryFile, type LibraryFile } from "./library-schema";
 import type { LibraryRepository } from "./storage";
-import { watchEventFieldsSchema } from "./types";
+import { STATUS_LABELS, watchEventFieldsSchema } from "./types";
 import type { Title, TitleKey, WatchEvent } from "./types";
 
 export type ImportCounts = { titlesToAdd: number; titlesToMerge: number; titlesUnchanged: number; eventsToAdd: number; eventsAlreadyPresent: number; conflicts: number };
 export type FieldChange = { field: string; oldValue: unknown; newValue: unknown };
 export type DiscardedValue = { field: string; value: unknown; reason: string };
-export type TitleDiff = TitleKey & { name: string; changes: FieldChange[]; discarded: DiscardedValue[] };
+export type TitleDiff = TitleKey & { name: string; isNew: boolean; eventCount: number; changes: FieldChange[]; discarded: DiscardedValue[] };
 export type ImportPlan = { file: LibraryFile; counts: ImportCounts; titles: Title[]; events: WatchEvent[]; titleDiffs: TitleDiff[]; settingsChanges: FieldChange[] };
 export const currentLibrarySettings = (): LibrarySettings => ({ theme: readTheme(), watch: readWatchPreferences() });
 const key = (title: TitleKey) => `${title.kind}:${title.tmdbId}`;
@@ -44,10 +44,20 @@ function mergeTitle(existing: Title, incoming: Title): Title {
     }
   }
   // No Title edit timestamp or separate local edit record exists. Cache/viewing dates are not edits.
-  merged.status = incoming.status;
+  // LIB-451 decision (option B): an imported Plan to Watch only applies to new titles and never replaces a local status.
+  if (incoming.status !== "planToWatch") merged.status = incoming.status;
   if (incoming.score !== null) merged.score = incoming.score;
   if (incoming.notes.trim()) merged.notes = incoming.notes;
   return merged;
+}
+
+/** One-line preview for a title that does not exist locally, e.g. "New show · Plan to Watch · 2019 · 24 episodes · 3 watch events". */
+export function summarizeNewTitle(title: Pick<Title, "kind" | "status" | "releaseDate" | "episodes">, eventCount: number): string {
+  const episodes = title.kind === "show" ? title.episodes?.seasons.reduce((sum, season) => sum + season.episodes.length, 0) ?? 0 : 0;
+  return [`New ${title.kind}`, STATUS_LABELS[title.status], title.releaseDate?.slice(0, 4),
+    episodes > 0 && `${episodes} ${episodes === 1 ? "episode" : "episodes"}`,
+    eventCount > 0 && `${eventCount} ${eventCount === 1 ? "watch event" : "watch events"}`,
+  ].filter(Boolean).join(" · ");
 }
 
 /** Pure diff shared by preview and the transaction; confirmation always recomputes against live data. */
@@ -63,7 +73,7 @@ export function planLibraryImport(file: LibraryFile, titles: Title[], events: Wa
   for (const { watchEvents, ...incoming } of file.titles) {
     const existing = byTitle.get(key(incoming));
     const merged = existing ? mergeTitle(existing, incoming) : incoming;
-    const diff: TitleDiff = { tmdbId: incoming.tmdbId, kind: incoming.kind, name: incoming.name, changes: [], discarded: [] };
+    const diff: TitleDiff = { tmdbId: incoming.tmdbId, kind: incoming.kind, name: incoming.name, isNew: !existing, eventCount: watchEvents.length, changes: [], discarded: [] };
     for (const [field, newValue] of Object.entries(merged)) {
       const oldValue = existing ? Reflect.get(existing, field) : undefined;
       if (!deepEqual(oldValue, newValue)) diff.changes.push({ field, oldValue, newValue });
@@ -71,7 +81,7 @@ export function planLibraryImport(file: LibraryFile, titles: Title[], events: Wa
       if (existing && !deepEqual(Reflect.get(existing, field), incomingValue)) {
         const incomingKept = deepEqual(newValue, incomingValue);
         diff.discarded.push({ field, value: incomingKept ? oldValue : incomingValue,
-          reason: incomingKept ?
+          reason: field === "status" && incomingValue === "planToWatch" ? "Imported Plan to Watch never replaces a local status." : incomingKept ?
             field === "status" || field === "score" || field === "notes" ? "Incoming value wins (no modification timestamps available)." : "Incoming metadata fills an empty local field." :
             field === "notes" || field === "score" ? "Empty incoming values never erase local values." : "Existing metadata is retained." });
       }

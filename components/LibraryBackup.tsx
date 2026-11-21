@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Button } from "./ui/Button";
-import { exportLibrary, previewImport, type ImportPlan } from "@/lib/library-import";
+import { exportLibrary, previewImport, summarizeNewTitle, type ImportPlan, type TitleDiff } from "@/lib/library-import";
 import { libraryRepository } from "@/lib/storage";
 import { useMetadataScheduler } from "./MetadataRefresh";
 
@@ -37,14 +37,15 @@ export function LibraryBackup() {
       <h3>Import preview</h3>
       <p>{plan.counts.titlesToAdd} titles to add · {plan.counts.titlesToMerge} titles to merge · {plan.counts.titlesUnchanged} titles unchanged</p>
       <p>{plan.counts.eventsToAdd} events to add · {plan.counts.eventsAlreadyPresent} events already present · {plan.counts.conflicts} conflicts</p>
-      <p>Incoming non-empty choices win when modification times are unavailable. Empty incoming values never erase local choices. Conflicting event IDs keep the existing event.</p>
+      <p>Incoming non-empty choices win when modification times are unavailable. Empty incoming values never erase local choices. An imported Plan to Watch status only applies to new titles and never replaces a local status. Conflicting event IDs keep the existing event.</p>
       <div style={{ maxHeight: "20rem", overflowY: "auto", fontSize: "0.875rem", overflowWrap: "anywhere" }} tabIndex={0} aria-label="Import details">
         <ul>{plan.titleDiffs.map((title) => <li key={`${title.kind}:${title.tmdbId}`}>
           <strong>{title.name} ({title.kind}:{title.tmdbId})</strong>
-          <ul>{title.changes.map((change) => <li key={change.field}>{change.field}: {displayValue(change.oldValue)} → {displayValue(change.newValue)}</li>)}
+          {title.isNew && <span> {newTitleSummary(plan, title)}</span>}
+          <ul>{!title.isNew && title.changes.map((change) => <li key={change.field}>{change.field}: {displayValue(change.oldValue)} → {displayValue(change.newValue)}</li>)}
             {title.discarded.map((item) => <li key={`discarded-${item.field}`}>Discarded {item.field}: {displayValue(item.value)} — {item.reason}</li>)}
           </ul>
-          {!title.changes.length && !title.discarded.length && <span> No title fields change.</span>}
+          {!title.isNew && !title.changes.length && !title.discarded.length && <span> No title fields change.</span>}
         </li>)}</ul>
         {plan.settingsChanges.length > 0 && <><h4>Settings</h4><ul>{plan.settingsChanges.map((change) => <li key={change.field}>{change.field}: {displayValue(change.oldValue)} → {displayValue(change.newValue)}</li>)}</ul></>}
       </div>
@@ -58,6 +59,11 @@ export function LibraryBackup() {
     {error && <p role="alert">{error}</p>}
     <p role="status" aria-live="polite">{busy ? "Working…" : message}</p>
   </section>;
+}
+
+function newTitleSummary(plan: ImportPlan, diff: TitleDiff): string {
+  const title = plan.titles.find((title) => title.kind === diff.kind && title.tmdbId === diff.tmdbId);
+  return title ? summarizeNewTitle(title, diff.eventCount) : "";
 }
 
 function displayValue(value: unknown): string {

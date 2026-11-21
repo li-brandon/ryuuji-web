@@ -107,6 +107,15 @@ export const watchEventFieldsSchema = z.strictObject({
 export type Kind = z.infer<typeof kindSchema>;
 export type ListStatus = z.infer<typeof listStatusSchema>;
 export type ShowStatus = z.infer<typeof showStatusSchema>;
+export const STATUS_LABELS: Record<ListStatus, string> = {
+  planToWatch: "Plan to Watch",
+  watching: "Watching",
+  rewatching: "Rewatching",
+  caughtUp: "Caught Up",
+  onHold: "On Hold",
+  dropped: "Dropped",
+  completed: "Completed",
+};
 export type EpisodeMetadata = z.infer<typeof episodeMetadataSchema>;
 export type WatchProviderData = z.infer<typeof watchProviderDataSchema>;
 export type Title = z.infer<typeof titleSchema>;

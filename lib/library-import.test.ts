@@ -1,10 +1,12 @@
 import "fake-indexeddb/auto";
 import { IDBObjectStore } from "fake-indexeddb";
 import { afterEach, expect, it, vi } from "vitest";
-import { show } from "../test/domain-fixtures";
+import { metadata, movie, season, show } from "../test/domain-fixtures";
 import fixture from "../test/fixtures/macos-library-export.json";
 import frieren from "../test/fixtures/tmdb/tv-209867.json";
-import { exportLibrary, previewImport, readLibraryFile } from "./library-import";
+import { exportLibrary, planLibraryImport, previewImport, readLibraryFile, summarizeNewTitle } from "./library-import";
+import type { LibraryFile, LibrarySettings } from "./library-schema";
+import type { Title } from "./types";
 import { LibraryRepository, openLibraryDB } from "./storage";
 import { applyShow } from "./title-mapper";
 import * as lock from "./watch-log-lock";
@@ -90,7 +92,7 @@ it("recomputes stale previews using the timestamp-free incoming-wins fallback", 
 });
 
 it.each([
-  { notes: "Incoming notes", score: 0, status: "planToWatch" as const },
+  { notes: "Incoming notes", score: 0, status: "onHold" as const },
   { notes: " \n ", score: null, status: "watching" as const },
 ])("previews all changed and discarded fields with the timestamp-free fallback: %j", async (choices) => {
   const { repo } = await setup();
@@ -177,4 +179,75 @@ it("does not restore settings when the database commit fails", async () => {
   vi.spyOn(IDBObjectStore.prototype, "add").mockImplementation(() => { throw new Error("disk failure"); });
   await expect(repo.importLibrary(plan)).rejects.toThrow("disk failure");
   expect(values.get("ryuuji-theme")).toBe("light");
+});
+
+const fileWith = (titles: Title[], settings?: LibrarySettings): LibraryFile => ({
+  format: "ryuuji-library", schemaVersion: 1, exportedAt: "2026-11-01T00:00:00Z", settings, titles: titles.map((title) => ({ ...title, watchEvents: [] })),
+});
+const reverseKeys = (value: unknown): unknown => Array.isArray(value) ? value.map(reverseKeys) :
+  value && typeof value === "object" ? Object.fromEntries(Object.entries(value).reverse().map(([k, v]) => [k, reverseKeys(v)])) : value;
+const provider = { id: 8, name: "Netflix", logoPath: null, displayPriority: 1 };
+
+it("ignores object key order in title and settings change detection", () => {
+  const local: Title = { ...show(season(1, 2)), providerData: { region: "US", fetchedAt: "2026-10-01T00:00:00Z", providers: [provider], rent: [], buy: [], link: null } };
+  const settings: LibrarySettings = { theme: "dark", watch: { region: "US", services: [8, 9] } };
+  const incoming = reverseKeys(local) as Title;
+  expect(Object.keys(incoming.episodes?.seasons[0].episodes[0] ?? {})).toEqual(Object.keys(local.episodes?.seasons[0].episodes[0] ?? {}).reverse());
+  const plan = planLibraryImport(fileWith([incoming], reverseKeys(settings) as LibrarySettings), [local], [], settings);
+  expect(plan.counts).toMatchObject({ titlesToAdd: 0, titlesToMerge: 0, titlesUnchanged: 1 });
+  expect(plan.titles).toEqual([]); expect(plan.titleDiffs[0]).toMatchObject({ isNew: false, changes: [], discarded: [] });
+  expect(plan.settingsChanges).toEqual([]);
+});
+
+it("keeps the local status over an imported Plan to Watch", () => {
+  const local = { ...movie(), status: "watching" as const };
+  const plan = planLibraryImport(fileWith([{ ...local, status: "planToWatch" }]), [local], [], {});
+  expect(plan.counts).toMatchObject({ titlesToMerge: 0, titlesUnchanged: 1 }); expect(plan.titles).toEqual([]);
+  expect(plan.titleDiffs[0].changes).toEqual([]);
+  expect(plan.titleDiffs[0].discarded).toEqual([{ field: "status", value: "planToWatch", reason: "Imported Plan to Watch never replaces a local status." }]);
+});
+
+it("applies other imported statuses and Plan to Watch on new titles", () => {
+  const local = movie(); const fresh = movie();
+  const plan = planLibraryImport(fileWith([{ ...local, status: "completed" }, fresh]), [local], [], {});
+  expect(plan.titles).toEqual([{ ...local, status: "completed" }, fresh]);
+  expect(plan.titles[1].status).toBe("planToWatch");
+  expect(plan.titleDiffs.map(({ isNew, eventCount }) => ({ isNew, eventCount }))).toEqual([{ isNew: false, eventCount: 0 }, { isNew: true, eventCount: 0 }]);
+});
+
+it("merges metadata from an imported Plan to Watch title without changing the local status", () => {
+  const local = { ...movie(), status: "completed" as const, overview: "" };
+  const plan = planLibraryImport(fileWith([{ ...local, status: "planToWatch", overview: "Imported overview" }]), [local], [], {});
+  expect(plan.counts.titlesToMerge).toBe(1);
+  expect(plan.titles).toEqual([{ ...local, overview: "Imported overview" }]);
+  expect(plan.titleDiffs[0].changes).toEqual([{ field: "overview", oldValue: "", newValue: "Imported overview" }]);
+});
+
+it("does not write an existing title whose only difference is an imported Plan to Watch", async () => {
+  const { repo } = await setup(); const file = readLibraryFile(fixture);
+  const { watchEvents, ...title } = file.titles[1];
+  await repo.importLibrary(await previewImport(repo, file));
+  await repo.updateTitle(title, { status: "dropped" });
+  file.titles[1] = { ...title, status: "planToWatch", watchEvents };
+  const put = vi.spyOn(IDBObjectStore.prototype, "put");
+  const plan = await previewImport(repo, file);
+  expect(plan.counts).toMatchObject({ titlesToAdd: 0, titlesToMerge: 0, titlesUnchanged: 3 });
+  await repo.importLibrary(plan);
+  expect(put).not.toHaveBeenCalled(); expect(await repo.getTitle(title)).toMatchObject({ status: "dropped" });
+});
+
+it("marks new titles with their watch-event count", () => {
+  const file = readLibraryFile(fixture);
+  const plan = planLibraryImport(file, [], [], {});
+  expect(plan.titleDiffs.map(({ isNew, eventCount }) => ({ isNew, eventCount }))).toEqual(file.titles.map((title) => ({ isNew: true, eventCount: title.watchEvents.length })));
+});
+
+it.each([
+  ["all parts", { ...show([...season(1, 12), ...season(2, 12)]), releaseDate: "2019-04-06" }, 3, "New show · Plan to Watch · 2019 · 24 episodes · 3 watch events"],
+  ["singulars", { ...show(season(1, 1), "watching"), releaseDate: "2020-01-01" }, 1, "New show · Watching · 2020 · 1 episode · 1 watch event"],
+  ["missing parts", show([]), 0, "New show · Plan to Watch"],
+  ["uncached episodes", { ...show([]), episodes: null }, 2, "New show · Plan to Watch · 2 watch events"],
+  ["movie", { ...movie(), status: "completed" as const, releaseDate: "2001-07-20", episodes: metadata(season(1, 3)) }, 1, "New movie · Completed · 2001 · 1 watch event"],
+])("summarizes a new title: %s", (_name, title, events, summary) => {
+  expect(summarizeNewTitle(title, events)).toBe(summary);
 });
