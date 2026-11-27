@@ -6,6 +6,16 @@ import { kindSchema } from "./types";
 import type { LibraryRepository } from "./storage";
 
 export const LAST_REFRESH_KEY = "lastMetadataRefresh";
+export const LEASE_KEY = "ryuuji-refresh-lease";
+/** Fallback lease lifetime; the holder renews it well before expiry so a closed tab frees it within minutes. */
+export const LEASE_TTL = 3 * 60 * 1000;
+const leaseSchema = z.object({ token: z.string().min(1), at: z.number().finite() });
+type Lease = z.infer<typeof leaseSchema>;
+
+export function refreshMessage(refreshed: number, failed: number) {
+  const summary = refreshed ? `Refreshed ${refreshed} title${refreshed === 1 ? "" : "s"}.` : "";
+  return failed ? [summary, "Some titles couldn’t refresh; we’ll retry."].filter(Boolean).join(" ") : summary;
+}
 export type RefreshState = { running: boolean; lastRun: number | null; message: string };
 type Options = {
   repository: () => Promise<LibraryRepository>;
@@ -66,11 +76,13 @@ export class RefreshScheduler {
     this.options.document.addEventListener("visibilitychange", this.wake);
     this.options.window.addEventListener("online", this.reconnect);
     this.options.window.addEventListener("storage", this.storageChanged);
-    void this.refresh(true).finally(() => this.schedule());
+    // Launch is stale-gated like wakeups; "Refresh now" and imports still force a cycle.
+    void this.refresh(false).finally(() => this.schedule());
   }
   stop() {
     this.stopped = true;
     if (this.timer !== undefined) this.clearTimer(this.timer);
+    this.timer = undefined;
     this.options.document.removeEventListener("visibilitychange", this.wake);
     this.options.window.removeEventListener("online", this.reconnect);
     this.options.window.removeEventListener("storage", this.storageChanged);
@@ -103,6 +115,46 @@ export class RefreshScheduler {
   private saveQueue(queue: Map<string, TitleKey>) {
     try { this.options.storage.setItem("ryuuji-import-refresh", JSON.stringify([...queue.values()])); } catch { /* Best effort when storage is unavailable. */ }
   }
+  private pause() {
+    return this.options.yield?.() ?? new Promise<void>((resolve) => this.setTimer(resolve, 0));
+  }
+  private readLease(): Lease | null {
+    try {
+      const parsed = leaseSchema.safeParse(JSON.parse(this.options.storage.getItem(LEASE_KEY) ?? "null"));
+      return parsed.success ? parsed.data : null;
+    } catch { return null; }
+  }
+  private writeLease(token: string) {
+    this.options.storage.setItem(LEASE_KEY, JSON.stringify({ token, at: this.now() } satisfies Lease));
+  }
+  /** Best-effort lease for browsers without Web Locks; Web Locks provides atomic exclusion. */
+  private async withLease(run: (owns: () => boolean) => Promise<void>) {
+    const current = this.readLease();
+    // Garbage, expired or future-dated (clock change) leases can be taken over.
+    if (current && Math.abs(this.now() - current.at) < LEASE_TTL) { this.publish("Another tab is refreshing metadata."); return; }
+    const token = globalThis.crypto?.randomUUID?.() ?? `${this.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+    const owner = () => this.readLease()?.token === token;
+    let lost = false;
+    let heartbeat: ReturnType<typeof setTimeout> | undefined;
+    // Renews only while this tab still holds the lease; once another tab overwrites it, stay out.
+    const owns = () => {
+      if (lost || !owner()) lost = true;
+      else try { this.writeLease(token); } catch { /* Storage may be unavailable; the lease simply ages. */ }
+      return !lost;
+    };
+    const beat = () => { heartbeat = this.setTimer(() => { if (owns()) beat(); }, LEASE_TTL / 3); };
+    this.writeLease(token);
+    try {
+      // Two tabs may claim at once; only the last writer still reads its own token.
+      await this.pause();
+      if (!owner()) { this.publish("Another tab is refreshing metadata."); return; }
+      beat();
+      await run(owns);
+    } finally {
+      if (heartbeat !== undefined) this.clearTimer(heartbeat);
+      if (owner()) this.options.storage.removeItem(LEASE_KEY);
+    }
+  }
 
   async refresh(force = true): Promise<void> {
     if (this.running) return;
@@ -115,9 +167,9 @@ export class RefreshScheduler {
     this.running = true;
     this.publish("Refreshing metadata…");
     try {
-      const run = async () => {
-        // Recheck after acquiring the cross-tab lock.
-        if (!force && !stale() && !this.queuedTitles().size) return;
+      const run = async (owns: () => boolean = () => true) => {
+        // Recheck after acquiring the cross-tab lock: another tab may have just finished.
+        if (!force && !stale() && !this.queuedTitles().size) { this.publish(""); return; }
         const repo = await this.options.repository();
         let refreshed = 0;
         let failed = 0;
@@ -126,6 +178,7 @@ export class RefreshScheduler {
         const due = new Map(dueTitles(all, new Date(this.now())).map((title) => [`${title.kind}:${title.tmdbId}`, title]));
         for (const title of all) if (queued.has(`${title.kind}:${title.tmdbId}`)) due.set(`${title.kind}:${title.tmdbId}`, title);
         for (const title of due.values()) {
+          if (!owns()) break;
           if (!this.options.online()) { failed++; break; }
           try {
             await refreshTitle(repo, title, { fetcher: this.options.fetcher, now: new Date(this.now()) });
@@ -134,8 +187,11 @@ export class RefreshScheduler {
             pending.delete(`${title.kind}:${title.tmdbId}`);
             this.saveQueue(pending);
           } catch { failed++; }
-          await (this.options.yield?.() ?? new Promise<void>((resolve) => this.setTimer(resolve, 0)));
+          await this.pause();
         }
+        if (refreshed) this.options.changed();
+        // Another tab took over the lease; it owns the rest of the cycle and the last-run time.
+        if (!owns()) { this.publish("Another tab is refreshing metadata."); return; }
         // A failed cycle stays stale so reconnect/focus can retry it.
         if (failed > 0) {
           try { this.options.storage.removeItem(LAST_REFRESH_KEY); } catch { /* Storage may be unavailable. */ }
@@ -143,28 +199,14 @@ export class RefreshScheduler {
         if (failed === 0) {
           try { this.options.storage.setItem(LAST_REFRESH_KEY, String(this.now())); } catch { /* Storage may be unavailable. */ }
         }
-        if (refreshed) this.options.changed();
-        this.publish(failed ? `Refreshed ${refreshed} titles. Some titles couldn’t refresh; we’ll retry.` : `Refreshed ${refreshed} titles.`);
+        this.publish(refreshMessage(refreshed, failed));
       };
       if (this.options.locks) {
         await this.options.locks.request("ryuuji-refresh", { ifAvailable: true }, async (lock) => {
           if (lock) await run();
           else this.publish("Another tab is refreshing metadata.");
         });
-      } else {
-        // Best-effort lease for older browsers; Web Locks provides atomic exclusion.
-        const key = "ryuuji-refresh-lease";
-        const token = `${this.now()}:${Math.random()}`;
-        const existing = this.options.storage.getItem(key);
-        if (!existing || this.now() - Number(existing.split(":")[0]) >= REFRESH_INTERVAL) {
-          this.options.storage.setItem(key, token);
-          try {
-            await (this.options.yield?.() ?? new Promise<void>((resolve) => this.setTimer(resolve, 0)));
-            if (this.options.storage.getItem(key) === token) await run();
-          }
-          finally { if (this.options.storage.getItem(key) === token) this.options.storage.removeItem(key); }
-        } else this.publish("Another tab is refreshing metadata.");
-      }
+      } else await this.withLease(run);
     } catch { this.publish("Couldn’t refresh metadata. We’ll retry."); }
     finally { this.running = false; this.publish(this.state.message); }
   }
